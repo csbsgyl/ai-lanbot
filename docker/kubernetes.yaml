@@ -114,7 +114,7 @@ spec:
     spec:
       containers:
       - name: langbot-plugin-runtime
-        image: rockchin/langbot:latest
+        image: csbsgyl/ai-lanbot:latest
         imagePullPolicy: Always
         command: ["uv", "run", "-m", "langbot_plugin.cli.__init__", "rt"]
         ports:
@@ -231,7 +231,7 @@ spec:
             topologyKey: kubernetes.io/hostname
       containers:
       - name: langbot-box
-        image: rockchin/langbot:latest
+        image: csbsgyl/ai-lanbot:latest
         imagePullPolicy: Always
         # Launched through the same CLI entry point as the plugin runtime.
         # No flag => WebSocket control transport (default), listening on 5410.
@@ -329,7 +329,7 @@ spec:
     spec:
       containers:
       - name: langbot
-        image: rockchin/langbot:latest
+        image: csbsgyl/ai-lanbot:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 5300

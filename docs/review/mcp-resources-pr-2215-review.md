@@ -2,7 +2,7 @@
 
 > 更新日期: 2026-06-29
 > 分支: `mcp_resources`
-> PR: langbot-app/LangBot#2215
+> PR: csbsgyl/ai-lanbot#2215
 > 主题: MCP Resources 在 LangBot 中的产品价值、AgentRunner 集成方式与后续架构方向
 
 ## 结论

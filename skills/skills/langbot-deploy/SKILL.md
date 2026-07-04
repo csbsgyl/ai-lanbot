@@ -10,8 +10,8 @@ Covers running LangBot in production. For development see `langbot-dev`.
 ## Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
+git clone https://github.com/csbsgyl/ai-lanbot
+cd ai-lanbot/docker
 
 # Full stack (sandbox/Box + stdio MCP hosting + skill add/edit enabled)
 docker compose --profile all up

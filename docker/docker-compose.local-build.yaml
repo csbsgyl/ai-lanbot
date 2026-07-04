@@ -1,23 +1,29 @@
 # Use this override when deploying this fork from source. It builds the local
-# checkout instead of pulling the upstream rockchin/langbot image, so secondary
-# development changes are included in every service.
+# checkout instead of pulling a remote image, so secondary development changes
+# are included in every service.
 services:
   langbot_plugin_runtime:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        DOCKER_IMAGE_PREFIX: ${LANBOT_DOCKER_IMAGE_PREFIX:-}
     image: csbsgyl/ai-lanbot:local
 
   langbot_box:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        DOCKER_IMAGE_PREFIX: ${LANBOT_DOCKER_IMAGE_PREFIX:-}
     image: csbsgyl/ai-lanbot:local
 
   langbot:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        DOCKER_IMAGE_PREFIX: ${LANBOT_DOCKER_IMAGE_PREFIX:-}
     image: csbsgyl/ai-lanbot:local
     ports:
       - "${LANGBOT_HTTP_PORT:-5300}:5300"

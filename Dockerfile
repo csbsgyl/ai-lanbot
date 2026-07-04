@@ -1,4 +1,6 @@
-FROM node:22-alpine AS node
+ARG DOCKER_IMAGE_PREFIX=
+
+FROM ${DOCKER_IMAGE_PREFIX}node:22-alpine AS node
 
 WORKDIR /app
 
@@ -11,7 +13,7 @@ RUN cd web && npm install && npx vite build
 # Multi-stage keeps the compile toolchain (bison/flex/protobuf-dev/libnl-dev)
 # out of the final image; only the nsjail binary and its small runtime libs
 # (libprotobuf, libnl-route-3) are carried over.
-FROM python:3.12.7-slim AS nsjail-build
+FROM ${DOCKER_IMAGE_PREFIX}python:3.12.7-slim AS nsjail-build
 
 ARG NSJAIL_VERSION=3.6
 
@@ -29,7 +31,7 @@ RUN apt-get update \
     && rm -f /tmp/nsjail.tar.gz \
     && rm -rf /var/lib/apt/lists/*
 
-FROM python:3.12.7-slim
+FROM ${DOCKER_IMAGE_PREFIX}python:3.12.7-slim
 
 WORKDIR /app
 

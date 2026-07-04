@@ -179,7 +179,7 @@ to one concurrent connection.
 
 Run `langbot-fake-provider-debug-chat-cross-pipeline-isolation` separately via
 `langbot-debug-chat-isolation-gate`. Current LangBot releases may fail it because
-of product bug [#2286](https://github.com/langbot-app/LangBot/issues/2286), where
+of product bug [#2286](https://github.com/csbsgyl/ai-lanbot/issues/2286), where
 Debug Chat replies can read singleton WebSocket proxy pipeline state after a
 later message overwrites it. Treat that failure as regression evidence for the
 product fix rather than as a fake-provider latency finding.

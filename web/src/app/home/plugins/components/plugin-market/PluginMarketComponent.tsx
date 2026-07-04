@@ -852,7 +852,7 @@ function MarketPageContent({
             {searchQuery ? t('market.noResults') : t('market.noPlugins')}
             {' · '}
             <a
-              href="https://github.com/langbot-app/langbot-plugin-demo/issues/new?template=plugin-request.yml"
+              href="https://github.com/csbsgyl/ai-lanbot/issues/new"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
@@ -888,7 +888,7 @@ function MarketPageContent({
                   : t('market.allLoaded')}
                 {' · '}
                 <a
-                  href="https://github.com/langbot-app/langbot-plugin-demo/issues/new?template=plugin-request.yml"
+                  href="https://github.com/csbsgyl/ai-lanbot/issues/new"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"

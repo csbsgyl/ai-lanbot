@@ -8,7 +8,7 @@ One-click Linux deployment:
 tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-The deployment script automatically detects whether GitHub direct download works and falls back to `https://github.xiaohangyun.org` when needed. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
+The deployment script automatically detects whether GitHub and Docker Hub direct access work. It falls back to `https://github.xiaohangyun.org` for source downloads and `https://docker.xiaohangyun.org` for Docker base images when needed. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
 
 ---
 
@@ -27,10 +27,10 @@ The deployment script automatically detects whether GitHub direct download works
 English / [简体中文](README_CN.md) / [繁體中文](README_TW.md) / [日本語](README_JP.md) / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/csbsgyl/ai-lanbot)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/csbsgyl/ai-lanbot)](https://github.com/csbsgyl/ai-lanbot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
-[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/csbsgyl/ai-lanbot?style=social)](https://github.com/csbsgyl/ai-lanbot/stargazers)
 
 <a href="https://langbot.app">Website</a> ｜
 <a href="https://link.langbot.app/en/docs/features">Features</a> ｜
@@ -92,8 +92,8 @@ uvx langbot
 ### Docker Compose
 
 ```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
+git clone https://github.com/csbsgyl/ai-lanbot
+cd ai-lanbot/docker
 docker compose --profile all up -d
 ```
 
@@ -202,14 +202,14 @@ _Note: Public demo environment. Do not enter sensitive information._
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=csbsgyl/ai-lanbot&type=Date)](https://star-history.com/#csbsgyl/ai-lanbot&Date)
 
 ---
 
 ## Contributors
 
-Thanks to all [contributors](https://github.com/langbot-app/LangBot/graphs/contributors) who have helped make LangBot better:
+Thanks to all [contributors](https://github.com/csbsgyl/ai-lanbot/graphs/contributors) who have helped make LangBot better:
 
-<a href="https://github.com/langbot-app/LangBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />
+<a href="https://github.com/csbsgyl/ai-lanbot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=csbsgyl/ai-lanbot" />
 </a>

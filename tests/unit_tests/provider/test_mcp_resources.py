@@ -190,8 +190,8 @@ def test_resource_uri_allowed_supports_listed_templates_conservatively():
         ],
     )
 
-    assert session.resource_uri_allowed('repo://langbot-app/LangBot/file/src/main.py') is True
-    assert session.resource_uri_allowed('repo://langbot-app/LangBot/issues/1') is False
+    assert session.resource_uri_allowed('repo://csbsgyl/ai-lanbot/file/src/main.py') is True
+    assert session.resource_uri_allowed('repo://csbsgyl/ai-lanbot/issues/1') is False
     assert session.resource_uri_allowed('https://example.com/secret') is False
 
 

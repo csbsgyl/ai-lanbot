@@ -218,4 +218,4 @@ def find_project_root() -> Path:
             return parent
 
     # Fallback to LangBot-test-build directory
-    return Path('/home/glwuy/langbot-app/LangBot-test-build')
+    return Path('/home/glwuy/csbsgyl/ai-lanbot-test-build')

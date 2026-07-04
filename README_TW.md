@@ -5,7 +5,7 @@
 
 <div align="center">
 
-<a href="https://hellogithub.com/repository/langbot-app/LangBot" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=5ce8ae2aa4f74316bf393b57b952433c&claim_uid=gtmc6YWjMZkT21R" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<a href="https://hellogithub.com/repository/csbsgyl/ai-lanbot" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=5ce8ae2aa4f74316bf393b57b952433c&claim_uid=gtmc6YWjMZkT21R" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 
 <h3>生產級 AI 即時通訊機器人開發平台。</h3>
 <h4>快速建構、除錯和部署 AI 機器人到微信、QQ、飛書、Slack、Discord、Telegram 等平台。</h4>
@@ -14,11 +14,11 @@
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
 [![QQ Group](https://img.shields.io/badge/%E7%A4%BE%E5%8C%BAQQ%E7%BE%A4-966235608-blue)](https://qm.qq.com/q/JLi38whHum)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/csbsgyl/ai-lanbot)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/csbsgyl/ai-lanbot)](https://github.com/csbsgyl/ai-lanbot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
-[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
-[![star](https://gitcode.com/RockChinQ/LangBot/star/badge.svg)](https://gitcode.com/RockChinQ/LangBot)
+[![GitHub stars](https://img.shields.io/github/stars/csbsgyl/ai-lanbot?style=social)](https://github.com/csbsgyl/ai-lanbot/stargazers)
+[![star](https://gitcode.com/csbsgyl/ai-lanbot/star/badge.svg)](https://gitcode.com/csbsgyl/ai-lanbot)
 
 <a href="https://langbot.app">官網</a> ｜
 <a href="https://link.langbot.app/zh/docs/features">特性</a> ｜
@@ -79,8 +79,8 @@ uvx langbot
 ### Docker Compose
 
 ```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
+git clone https://github.com/csbsgyl/ai-lanbot
+cd ai-lanbot/docker
 docker compose --profile all up -d
 ```
 
@@ -202,14 +202,14 @@ LangBot **從設計上就對 Agent 友善** —— 你的編碼 Agent（Claude C
 
 ## Star 趨勢
 
-[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=csbsgyl/ai-lanbot&type=Date)](https://star-history.com/#csbsgyl/ai-lanbot&Date)
 
 ---
 
 ## 貢獻者
 
-感謝所有[貢獻者](https://github.com/langbot-app/LangBot/graphs/contributors)對 LangBot 的幫助：
+感謝所有[貢獻者](https://github.com/csbsgyl/ai-lanbot/graphs/contributors)對 LangBot 的幫助：
 
-<a href="https://github.com/langbot-app/LangBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />
+<a href="https://github.com/csbsgyl/ai-lanbot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=csbsgyl/ai-lanbot" />
 </a>

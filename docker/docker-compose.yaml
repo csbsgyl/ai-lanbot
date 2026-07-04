@@ -5,7 +5,7 @@ version: "3"
 services:
 
   langbot_plugin_runtime:
-    image: rockchin/langbot:latest
+    image: csbsgyl/ai-lanbot:latest
     container_name: langbot_plugin_runtime
     volumes:
       - ./data/plugins:/app/data/plugins
@@ -25,7 +25,7 @@ services:
   # set ``box.enabled: false`` in ``data/config.yaml`` (or
   # ``BOX__ENABLED=false`` in the langbot service env below) to match.
   langbot_box:
-    image: rockchin/langbot:latest
+    image: csbsgyl/ai-lanbot:latest
     container_name: langbot_box
     profiles: ["box", "all"]
     volumes:
@@ -53,7 +53,7 @@ services:
       - langbot_network
 
   langbot:
-    image: rockchin/langbot:latest
+    image: csbsgyl/ai-lanbot:latest
     container_name: langbot
     volumes:
       - ./data:/app/data

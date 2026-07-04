@@ -74,8 +74,8 @@ langbot --debug
 If you want to contribute or customize LangBot, you should still use the manual installation method by cloning the repository:
 
 ```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot
+git clone https://github.com/csbsgyl/ai-lanbot
+cd ai-lanbot
 uv sync
 cd web
 npm install

@@ -7,6 +7,8 @@ REPO_BRANCH="${LANBOT_BRANCH:-main}"
 REPO_SLUG="${REPO_OWNER}/${REPO_NAME}"
 GITHUB_BASE="https://github.com"
 GITHUB_ACCELERATOR="https://github.xiaohangyun.org"
+DOCKER_ACCELERATOR="https://docker.xiaohangyun.org"
+DOCKER_ACCELERATOR_PREFIX="docker.xiaohangyun.org/library/"
 
 if [ "${EUID:-$(id -u)}" -eq 0 ]; then
   DEFAULT_INSTALL_DIR="/opt/${REPO_NAME}"
@@ -131,6 +133,39 @@ can_use_direct_github() {
   curl -fsL --connect-timeout 8 --max-time 15 --range 0-0 -o /dev/null "$probe_url" >/dev/null 2>&1
 }
 
+can_reach_dockerhub() {
+  local status
+  status="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 8 https://registry-1.docker.io/v2/ || true)"
+  [ "$status" = "200" ] || [ "$status" = "401" ]
+}
+
+docker_accelerator_has_required_images() {
+  curl -fsL --connect-timeout 8 --max-time 20 "${DOCKER_ACCELERATOR}/v2/library/node/tags/list" | grep -q '"22-alpine"' \
+    && curl -fsL --connect-timeout 8 --max-time 20 "${DOCKER_ACCELERATOR}/v2/library/python/tags/list" | grep -q '"3.12.7-slim"'
+}
+
+resolve_docker_image_prefix() {
+  if [ -n "${LANBOT_DOCKER_IMAGE_PREFIX:-}" ]; then
+    printf '%s' "$LANBOT_DOCKER_IMAGE_PREFIX"
+    return 0
+  fi
+
+  if can_reach_dockerhub; then
+    log "Docker Hub direct access is available." >&2
+    printf ''
+    return 0
+  fi
+
+  if docker_accelerator_has_required_images; then
+    log "Docker Hub direct access is unavailable. Using accelerator: ${DOCKER_ACCELERATOR}" >&2
+    printf '%s' "$DOCKER_ACCELERATOR_PREFIX"
+    return 0
+  fi
+
+  log "Docker Hub direct access failed, but Docker accelerator did not expose required base images. Continuing without a mirror." >&2
+  printf ''
+}
+
 download_archive() {
   local archive="$1"
   local direct_url="${GITHUB_BASE}/${REPO_SLUG}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
@@ -219,11 +254,18 @@ fetch_source() {
 
 write_env() {
   local env_file="${INSTALL_DIR}/docker/.env"
+  local docker_image_prefix
+  docker_image_prefix="$(resolve_docker_image_prefix)"
   if [ ! -f "$env_file" ]; then
     cat > "$env_file" <<EOF
 LANGBOT_HTTP_PORT=${HTTP_PORT}
 LANGBOT_BOX_ROOT=${INSTALL_DIR}/docker/data/box
+LANBOT_DOCKER_IMAGE_PREFIX=${docker_image_prefix}
 EOF
+  elif grep -q '^LANBOT_DOCKER_IMAGE_PREFIX=' "$env_file"; then
+    sed -i "s|^LANBOT_DOCKER_IMAGE_PREFIX=.*|LANBOT_DOCKER_IMAGE_PREFIX=${docker_image_prefix}|" "$env_file"
+  else
+    printf '\nLANBOT_DOCKER_IMAGE_PREFIX=%s\n' "$docker_image_prefix" >> "$env_file"
   fi
 }
 

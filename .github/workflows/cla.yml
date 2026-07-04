@@ -7,7 +7,7 @@ on:
 
 permissions:
   actions: write          # re-run the failed CLA check after signing
-  contents: read          # signatures are stored in the remote langbot-app/cla repo
+  contents: read          # signatures are stored in the remote csbsgyl/ai-lanbot repo
   pull-requests: write    # post guidance comments, lock PR after merge
   statuses: write         # set the commit status
 
@@ -21,19 +21,19 @@ jobs:
         uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # repo-scope PAT with write access to langbot-app/cla
+          # repo-scope PAT with write access to csbsgyl/ai-lanbot
           PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_PAT }}
         with:
-          path-to-document: 'https://github.com/langbot-app/LangBot/blob/master/CLA.md'
-          remote-organization-name: 'langbot-app'
-          remote-repository-name: 'cla'
-          path-to-signatures: 'signatures/version1/cla.json'
+          path-to-document: 'https://github.com/csbsgyl/ai-lanbot/blob/master/CLA.md'
+          remote-organization-name: 'csbsgyl'
+          remote-repository-name: 'ai-lanbot'
+          path-to-signatures: '.github/cla-signatures/version1/cla.json'
           branch: 'main'
           allowlist: 'dependabot[bot],github-actions[bot],devin-ai-integration[bot],Copilot,renovate[bot],bot*'
           custom-notsigned-prcomment: |
-            Thank you for your contribution! :heart: Before we can merge this pull request, we need you to sign the [LangBot Contributor License Agreement (CLA)](https://github.com/langbot-app/LangBot/blob/master/CLA.md). You keep full copyright of your code — the CLA grants us a license to use and distribute your contribution. Signing takes 10 seconds and covers all repositories in this organization, permanently.
+            Thank you for your contribution! :heart: Before we can merge this pull request, we need you to sign the [LangBot Contributor License Agreement (CLA)](https://github.com/csbsgyl/ai-lanbot/blob/master/CLA.md). You keep full copyright of your code — the CLA grants us a license to use and distribute your contribution. Signing takes 10 seconds and covers all repositories in this organization, permanently.
 
-            感谢您的贡献！合并前请阅读并签署[贡献者许可协议（CLA）](https://github.com/langbot-app/LangBot/blob/master/CLA.md)。您保留代码的全部版权，签署仅需回复下方指定内容，一次签署对本组织全部仓库永久有效。
+            感谢您的贡献！合并前请阅读并签署[贡献者许可协议（CLA）](https://github.com/csbsgyl/ai-lanbot/blob/master/CLA.md)。您保留代码的全部版权，签署仅需回复下方指定内容，一次签署对本组织全部仓库永久有效。
           custom-allsigned-prcomment: 'All contributors have signed the CLA. :white_check_mark: 所有贡献者均已签署 CLA。'
           lock-pullrequest-aftermerge: true
         # SECURITY: this workflow runs on pull_request_target (it holds secrets and has

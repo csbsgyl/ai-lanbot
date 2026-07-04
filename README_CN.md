@@ -8,7 +8,7 @@ Linux 服务器一键部署：
 tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-部署脚本会自动检测 GitHub 直连是否可用；不可用或过慢时自动使用 `https://github.xiaohangyun.org` 下载源码，用户不需要手动填写加速站。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
+部署脚本会自动检测 GitHub 和 Docker Hub 直连是否可用；不可用或过慢时自动使用 `https://github.xiaohangyun.org` 下载源码，并使用 `https://docker.xiaohangyun.org` 拉取 Docker 基础镜像，用户不需要手动填写加速站。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
 
 ---
 
@@ -19,7 +19,7 @@ tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githu
 
 <div align="center">
 
-<a href="https://hellogithub.com/repository/langbot-app/LangBot" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=5ce8ae2aa4f74316bf393b57b952433c&claim_uid=gtmc6YWjMZkT21R" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<a href="https://hellogithub.com/repository/csbsgyl/ai-lanbot" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=5ce8ae2aa4f74316bf393b57b952433c&claim_uid=gtmc6YWjMZkT21R" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 
 <h3>生产级 AI 即时通信机器人开发平台。</h3>
 <h4>快速构建、调试和部署 AI 机器人到微信、QQ、飞书、Slack、Discord、Telegram 等平台。</h4>
@@ -28,11 +28,11 @@ tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githu
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
 [![QQ Group](https://img.shields.io/badge/%E7%A4%BE%E5%8C%BAQQ%E7%BE%A4-1030838208-blue)](https://qm.qq.com/q/IrlV8QFacU)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/csbsgyl/ai-lanbot)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/csbsgyl/ai-lanbot)](https://github.com/csbsgyl/ai-lanbot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
-[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
-[![star](https://gitcode.com/RockChinQ/LangBot/star/badge.svg)](https://gitcode.com/RockChinQ/LangBot)
+[![GitHub stars](https://img.shields.io/github/stars/csbsgyl/ai-lanbot?style=social)](https://github.com/csbsgyl/ai-lanbot/stargazers)
+[![star](https://gitcode.com/csbsgyl/ai-lanbot/star/badge.svg)](https://gitcode.com/csbsgyl/ai-lanbot)
 
 <a href="https://langbot.app">官网</a> ｜
 <a href="https://link.langbot.app/zh/docs/features">特性</a> ｜
@@ -71,7 +71,7 @@ LangBot 是一个**开源的生产级平台**，用于构建 AI 驱动的即时�
 
 ## 😎 保持更新
 
-点击[仓库首页](https://github.com/langbot-app/LangBot)右上角 Star 和 Watch 按钮，获取最新动态。
+点击[仓库首页](https://github.com/csbsgyl/ai-lanbot)右上角 Star 和 Watch 按钮，获取最新动态。
 
 ![star gif](https://langbot.app/star.gif)
 
@@ -92,8 +92,8 @@ uvx langbot
 ### Docker Compose
 
 ```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
+git clone https://github.com/csbsgyl/ai-lanbot
+cd ai-lanbot/docker
 docker compose --profile all up -d
 ```
 
@@ -219,16 +219,16 @@ LangBot **从设计上就对 Agent 友好** —— 你的编码 Agent（Claude C
 
 ## Star 趋势
 
-[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=csbsgyl/ai-lanbot&type=Date)](https://star-history.com/#csbsgyl/ai-lanbot&Date)
 
 ---
 
 ## 贡献者
 
-感谢所有[贡献者](https://github.com/langbot-app/LangBot/graphs/contributors)对 LangBot 的帮助：
+感谢所有[贡献者](https://github.com/csbsgyl/ai-lanbot/graphs/contributors)对 LangBot 的帮助：
 
-<a href="https://github.com/langbot-app/LangBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />
+<a href="https://github.com/csbsgyl/ai-lanbot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=csbsgyl/ai-lanbot" />
 </a>
 
 <!--

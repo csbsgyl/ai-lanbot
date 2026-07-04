@@ -25,7 +25,7 @@ jobs:
         working-directory: ./docker
         run: |
           # Replace 'latest' with 'master' tag for testing the dev image
-          sed -i 's/rockchin\/langbot:latest/rockchin\/langbot:master/g' docker-compose.yaml
+          sed -i 's/csbsgyl\/ai-lanbot:latest/csbsgyl\/ai-lanbot:master/g' docker-compose.yaml
           echo "Updated docker-compose.yaml to use master tag:"
           cat docker-compose.yaml
 

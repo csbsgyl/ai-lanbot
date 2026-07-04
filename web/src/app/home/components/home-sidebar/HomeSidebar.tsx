@@ -2103,7 +2103,7 @@ export default function HomeSidebar({
                     <DropdownMenuItem
                       onClick={() => {
                         window.open(
-                          'https://github.com/langbot-app/LangBot',
+                          'https://github.com/csbsgyl/ai-lanbot',
                           '_blank',
                         );
                       }}

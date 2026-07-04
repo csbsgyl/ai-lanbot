@@ -12,10 +12,12 @@ This repository is a secondary-development fork of [langbot-app/LangBot](https:/
 
 - Fork repository: `csbsgyl/ai-lanbot`
 - Purpose: secondary development, deployment packaging, and deployment convenience for self-hosted users.
+- Deployment commands, Docker image references, CI links, and user-facing source links target `csbsgyl/ai-lanbot`.
 - Current fork-specific additions:
   - Public fork notice and deployment documentation.
   - Source-build Docker Compose override so deployments use this fork's code instead of the upstream image.
   - One-click Linux deployment script with automatic GitHub direct/accelerated archive download selection.
+  - Automatic Docker base-image accelerator selection through `https://docker.xiaohangyun.org` when Docker Hub direct access is unavailable.
 
 ## Attribution
 

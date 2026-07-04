@@ -26,4 +26,4 @@ jobs:
       - name: Build Docker Image
         run: |
           docker buildx create --name mybuilder --use
-          docker build -t rockchin/langbot:${{ steps.generate_tag.outputs.tag }} . --push
+          docker build -t csbsgyl/ai-lanbot:${{ steps.generate_tag.outputs.tag }} . --push

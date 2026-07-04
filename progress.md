@@ -77,3 +77,57 @@
 - `GitHub repository settings`: changed visibility to public for `csbsgyl/ai-lanbot`.
 - `D:\ai-lanbot\progress.md`: appended this public-access verification log entry.
 - Rollback: change repository visibility back to private in GitHub repository settings or via GitHub API with `private=true`.
+
+## 2026-07-04 - Task: Replace upstream pull and deployment links with fork-owned endpoints
+### What was done
+- Replaced remaining user-facing repository, clone, badge, contribution, issue, Docker image, Docker Compose, Kubernetes, CI, and test-environment references so deployment and collaboration paths target `csbsgyl/ai-lanbot`.
+- Kept original `langbot-app/LangBot` only as fork attribution and upstream metadata, with explicit fork documentation stating deployment commands and user-facing source links belong to `csbsgyl/ai-lanbot`.
+- Extended the one-click deployment flow to detect Docker Hub availability and automatically use `https://docker.xiaohangyun.org` for Docker base images when direct access is unavailable.
+- Updated one-click deployment documentation to state that GitHub and Docker acceleration are detected automatically and do not require users to enter accelerator URLs.
+
+### Testing
+- Ran `D:\rj-gj\Git\bin\bash.exe -n scripts/one-click-deploy.sh` successfully.
+- Ran `uv run pytest tests/unit_tests/provider/test_mcp_resources.py -q`: 8 tests passed.
+- Ran `git diff --check` successfully.
+- Verified `https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/README.md` can be fetched successfully.
+- Verified `https://docker.xiaohangyun.org/v2/library/node/tags/list` contains `22-alpine` and `https://docker.xiaohangyun.org/v2/library/python/tags/list` contains `3.12.7-slim`.
+- Verified `resolve_docker_image_prefix` captures `docker.xiaohangyun.org/library/` when Docker Hub direct access is unavailable, and captures a manually supplied `LANBOT_DOCKER_IMAGE_PREFIX` unchanged.
+- Ran an upstream pull/deploy/image scan for `rockchin/langbot`, `git clone https://github.com/langbot-app/LangBot`, `RockChinQ/LangBot`, and `langbot-plugin-demo`; no active matches remained outside historical progress notes and fork attribution.
+- Docker Compose runtime/build verification was not run because Docker is not installed on this workstation.
+
+### Notes
+- `D:\ai-lanbot\.github\pull_request_template.md`: updated contribution and CLA links to the fork repository.
+- `D:\ai-lanbot\.github\workflows\build-dev-image.yaml`: changed dev image publishing to `csbsgyl/ai-lanbot`.
+- `D:\ai-lanbot\.github\workflows\build-docker-image.yml`: changed release and prerelease image publishing to `csbsgyl/ai-lanbot`.
+- `D:\ai-lanbot\.github\workflows\cla.yml`: moved CLA document and signature storage references to `csbsgyl/ai-lanbot`.
+- `D:\ai-lanbot\.github\workflows\test-dev-image.yaml`: changed dev image smoke-test substitution to `csbsgyl/ai-lanbot:master`.
+- `D:\ai-lanbot\Dockerfile`: added Docker base-image prefix support for accelerated base image pulls.
+- `D:\ai-lanbot\README.md`: updated deployment, badge, release, star, contributor, and acceleration references for the fork.
+- `D:\ai-lanbot\README_CN.md`: updated Chinese deployment, badge, release, star, contributor, and acceleration references for the fork.
+- `D:\ai-lanbot\README_ES.md`: updated Spanish clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\README_FR.md`: updated French clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\README_JP.md`: updated Japanese clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\README_KO.md`: updated Korean clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\README_RU.md`: updated Russian clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\README_TW.md`: updated Traditional Chinese clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\README_VI.md`: updated Vietnamese clone, badge, release, star, and contributor references for the fork.
+- `D:\ai-lanbot\docker\docker-compose.local-build.yaml`: added Docker base-image prefix build args and removed upstream image wording.
+- `D:\ai-lanbot\docker\docker-compose.yaml`: changed service images to `csbsgyl/ai-lanbot:latest`.
+- `D:\ai-lanbot\docker\kubernetes.yaml`: changed deployment images to `csbsgyl/ai-lanbot:latest`.
+- `D:\ai-lanbot\docs\FORK_NOTICE.md`: documented that deployment, CI, image, and user-facing source references target this fork.
+- `D:\ai-lanbot\docs\ONE_CLICK_DEPLOY.md`: documented automatic GitHub and Docker accelerator selection.
+- `D:\ai-lanbot\docs\PYPI_INSTALLATION.md`: corrected the source checkout directory after cloning this fork.
+- `D:\ai-lanbot\docs\review\mcp-resources-pr-2215-review.md`: updated the PR reference to the fork namespace.
+- `D:\ai-lanbot\docs\service-api-openapi.json`: updated the license URL to the fork repository.
+- `D:\ai-lanbot\scripts\one-click-deploy.sh`: added Docker Hub probing, Docker accelerator probing, and `.env` prefix writing for accelerated base image pulls.
+- `D:\ai-lanbot\skills\skills\langbot-deploy\SKILL.md`: updated deploy clone commands to this fork and its checkout directory.
+- `D:\ai-lanbot\skills\skills\langbot-plugin-dev\references\test-env-setup.md`: updated test environment images to `csbsgyl/ai-lanbot`.
+- `D:\ai-lanbot\skills\skills\langbot-testing\cases\langbot-fake-provider-debug-chat-cross-pipeline-isolation.yaml`: updated issue references to the fork.
+- `D:\ai-lanbot\skills\skills\langbot-testing\references\performance-reliability-testing.md`: updated issue references to the fork.
+- `D:\ai-lanbot\src\langbot\__main__.py`: updated the startup open-source repository URL to this fork.
+- `D:\ai-lanbot\tests\e2e\utils\process_manager.py`: updated the fallback test-build path away from the upstream namespace.
+- `D:\ai-lanbot\tests\unit_tests\provider\test_mcp_resources.py`: updated repository URI test examples to the fork namespace.
+- `D:\ai-lanbot\web\src\app\home\components\home-sidebar\HomeSidebar.tsx`: updated the web UI GitHub link to this fork.
+- `D:\ai-lanbot\web\src\app\home\plugins\components\plugin-market\PluginMarketComponent.tsx`: updated plugin request links to this fork's issue entry.
+- `D:\ai-lanbot\progress.md`: appended this task log entry.
+- Rollback: before commit, run `git restore <file>` for the listed files; after commit, run `git revert <commit>` to undo this task as a single change set.

@@ -13,10 +13,10 @@
 [English](README.md) / [简体中文](README_CN.md) / [繁體中文](README_TW.md) / [日本語](README_JP.md) / [Español](README_ES.md) / [Français](README_FR.md) / 한국어 / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/csbsgyl/ai-lanbot)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/csbsgyl/ai-lanbot)](https://github.com/csbsgyl/ai-lanbot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
-[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/csbsgyl/ai-lanbot?style=social)](https://github.com/csbsgyl/ai-lanbot/stargazers)
 
 <a href="https://langbot.app">홈</a> ｜
 <a href="https://link.langbot.app/en/docs/features">기능</a> ｜
@@ -77,8 +77,8 @@ uvx langbot
 ### Docker Compose
 
 ```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
+git clone https://github.com/csbsgyl/ai-lanbot
+cd ai-lanbot/docker
 docker compose --profile all up -d
 ```
 
@@ -184,14 +184,14 @@ LangBot은 **설계 단계부터 에이전트 친화적**입니다 —— 코딩
 
 ## Star 추이
 
-[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=csbsgyl/ai-lanbot&type=Date)](https://star-history.com/#csbsgyl/ai-lanbot&Date)
 
 ---
 
 ## 기여자
 
-LangBot을 더 나은 프로젝트로 만들어 주신 모든 [기여자](https://github.com/langbot-app/LangBot/graphs/contributors)분들께 감사드립니다:
+LangBot을 더 나은 프로젝트로 만들어 주신 모든 [기여자](https://github.com/csbsgyl/ai-lanbot/graphs/contributors)분들께 감사드립니다:
 
-<a href="https://github.com/langbot-app/LangBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />
+<a href="https://github.com/csbsgyl/ai-lanbot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=csbsgyl/ai-lanbot" />
 </a>
