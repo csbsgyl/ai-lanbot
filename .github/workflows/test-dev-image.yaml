@@ -6,6 +6,7 @@ on:
     types:
       - completed
     branches:
+      - main
       - master
 
 jobs:
@@ -21,12 +22,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Update Docker Compose to use master tag
+      - name: Update Docker Compose to use branch tag
         working-directory: ./docker
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          # Replace 'latest' with 'master' tag for testing the dev image
-          sed -i 's/csbsgyl\/ai-lanbot:latest/csbsgyl\/ai-lanbot:master/g' docker-compose.yaml
-          echo "Updated docker-compose.yaml to use master tag:"
+          # Replace 'latest' with the branch tag for testing the dev image.
+          branch_tag="${HEAD_BRANCH:-${GITHUB_REF_NAME:-main}}"
+          branch_tag="${branch_tag//\//-}"
+          sed -i "s|ghcr.io/csbsgyl/ai-lanbot:latest|ghcr.io/csbsgyl/ai-lanbot:${branch_tag}|g" docker-compose.yaml
+          sed -i "s|csbsgyl/ai-lanbot:latest|csbsgyl/ai-lanbot:${branch_tag}|g" docker-compose.yaml
+          echo "Updated docker-compose.yaml to use ${branch_tag} tag:"
           cat docker-compose.yaml
 
       - name: Start Docker Compose

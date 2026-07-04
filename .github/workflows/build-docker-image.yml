@@ -1,47 +1,75 @@
 name: Build Docker Image
+
 on:
-  ## 发布release的时候会自动构建
   release:
-    types: [published]
+    types:
+      - published
+
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   publish-docker-image:
     runs-on: ubuntu-latest
     name: Build image
-    
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          persist-credentials: false
+        uses: actions/checkout@v4
 
-      - name: judge has env GITHUB_REF  # 如果没有GITHUB_REF环境变量，则把github.ref变量赋值给GITHUB_REF
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub when configured
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
-          if [ -z "$GITHUB_REF" ]; then
-            export GITHUB_REF=${{ github.ref }}
-            echo $GITHUB_REF
-          fi
-      - name: Check version
-        id: check_version
-        run: |
-          echo $GITHUB_REF
-          # 如果是tag，则去掉refs/tags/前缀
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "It's a tag"
-            echo $GITHUB_REF
-            echo $GITHUB_REF | awk -F '/' '{print $3}'
-            echo ::set-output name=version::$(echo $GITHUB_REF | awk -F '/' '{print $3}')
+          if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+            echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
           else
-            echo "It's not a tag"
-            echo $GITHUB_REF
-            echo ::set-output name=version::${GITHUB_REF}
+            echo "Docker Hub credentials are not configured; GHCR image will still be published."
           fi
-      - name: Login to Registry
-        run: docker login --username=${{ secrets.DOCKER_USERNAME }} --password ${{ secrets.DOCKER_PASSWORD }}
-      - name: Create Buildx
-        run: docker buildx create --name mybuilder --use
-      - name: Build for Release # only relase, exlude pre-release
-        if: ${{ github.event.release.prerelease == false }}
-        run: docker buildx build --platform linux/arm64,linux/amd64 -t csbsgyl/ai-lanbot:${{ steps.check_version.outputs.version }} -t csbsgyl/ai-lanbot:latest . --push
-      - name: Build for Pre-release # no update for latest tag
-        if: ${{ github.event.release.prerelease == true }}
-        run: docker buildx build --platform linux/arm64,linux/amd64 -t csbsgyl/ai-lanbot:${{ steps.check_version.outputs.version }} . --push
+
+      - name: Generate tags
+        id: tags
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          {
+            echo "tags<<EOF"
+            echo "ghcr.io/${GITHUB_REPOSITORY}:${RELEASE_TAG}"
+            if [ "$IS_PRERELEASE" != "true" ]; then
+              echo "ghcr.io/${GITHUB_REPOSITORY}:latest"
+            fi
+            if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+              echo "${GITHUB_REPOSITORY}:${RELEASE_TAG}"
+              if [ "$IS_PRERELEASE" != "true" ]; then
+                echo "${GITHUB_REPOSITORY}:latest"
+              fi
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}

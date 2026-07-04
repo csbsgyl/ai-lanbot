@@ -8,7 +8,7 @@ Linux 服务器一键部署：
 tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-部署脚本会自动检测 GitHub 和 Docker Hub 直连是否可用；不可用或过慢时自动使用 `https://github.xiaohangyun.org` 下载源码，并使用 `https://docker.xiaohangyun.org` 拉取 Docker 基础镜像，用户不需要手动填写加速站。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
+部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用，默认优先拉取本二开仓库的预构建镜像以加快部署；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本只有在 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
 
 ---
 

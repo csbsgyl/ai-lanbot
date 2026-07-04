@@ -8,7 +8,7 @@ Create in `server-deploy` repo under `servers/<hostname>/langbot-test/docker-com
 version: "3"
 services:
   langbot_plugin_runtime:
-    image: csbsgyl/ai-lanbot:latest
+    image: ghcr.io/csbsgyl/ai-lanbot:latest
     container_name: langbot-test-runtime
     volumes:
       - /opt/docker-data/langbot-test/data/plugins:/app/data/plugins
@@ -22,7 +22,7 @@ services:
       - langbot_test_network
 
   langbot:
-    image: csbsgyl/ai-lanbot:latest
+    image: ghcr.io/csbsgyl/ai-lanbot:latest
     container_name: langbot-test
     volumes:
       - /opt/docker-data/langbot-test/data:/app/data

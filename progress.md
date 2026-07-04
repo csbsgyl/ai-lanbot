@@ -131,3 +131,37 @@
 - `D:\ai-lanbot\web\src\app\home\plugins\components\plugin-market\PluginMarketComponent.tsx`: updated plugin request links to this fork's issue entry.
 - `D:\ai-lanbot\progress.md`: appended this task log entry.
 - Rollback: before commit, run `git restore <file>` for the listed files; after commit, run `git revert <commit>` to undo this task as a single change set.
+
+## 2026-07-04 - Task: Make one-click deployment faster and show post-deploy login guidance
+### What was done
+- Changed the one-click deployment default path to start from a prebuilt fork image instead of always building locally on the target server.
+- Added runtime image detection for Docker Hub, the configured Docker accelerator, GHCR, and a clearly labeled source-build fallback.
+- Added deployment failure diagnostics, an HTTP health check against `/api/v1/system/info`, and success output that shows local/remote URLs, `/register` first-admin setup, `/login`, and maintenance commands.
+- Fixed the local source-build path so the Dockerfile fetches `nsjail` with its `kafel` submodule instead of failing on the source archive.
+- Updated Docker image publishing workflows so main/release builds publish GHCR images, with Docker Hub publishing when Docker Hub secrets are configured.
+- Updated deployment documentation and README guidance to state that fresh installs have no default username/password and must create the first administrator at `/register`.
+
+### Testing
+- Ran `D:\rj-gj\Git\bin\bash.exe -n scripts/one-click-deploy.sh` successfully.
+- Ran `git diff --check` successfully.
+- Verified `https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh` returns HTTP 200.
+- Verified `https://github.xiaohangyun.org/https://github.com/google/nsjail.git` and `https://github.xiaohangyun.org/https://github.com/google/kafel.git` are reachable with `git ls-remote`.
+- Verified `https://docker.xiaohangyun.org/v2/library/node/tags/list` and `https://docker.xiaohangyun.org/v2/library/python/tags/list` return HTTP 200.
+- Verified `https://docker.xiaohangyun.org/v2/csbsgyl/ai-lanbot/tags/list` currently returns HTTP 404, so the script must still support GHCR and source-build fallback until a Docker Hub image is published.
+- Docker Compose runtime verification was not run because Docker is not installed on this workstation.
+- GitHub Actions YAML parsing was not run because Python `yaml` is not installed on this workstation; workflow files were reviewed via diff instead.
+
+### Notes
+- `D:\ai-lanbot\scripts\one-click-deploy.sh`: switched default deployment to prebuilt image mode, added image resolution, health checks, failure diagnostics, and login/setup output.
+- `D:\ai-lanbot\docker\docker-compose.yaml`: made service images configurable through `LANBOT_IMAGE` and made the web port respect `LANGBOT_HTTP_PORT`.
+- `D:\ai-lanbot\Dockerfile`: changed `nsjail` build source retrieval to git clone plus submodule initialization with GitHub accelerator fallback.
+- `D:\ai-lanbot\.github\workflows\build-dev-image.yaml`: rebuilt the push image workflow to publish multi-arch GHCR images and optional Docker Hub images.
+- `D:\ai-lanbot\.github\workflows\build-docker-image.yml`: rebuilt the release image workflow to publish multi-arch GHCR images and optional Docker Hub images.
+- `D:\ai-lanbot\.github\workflows\test-dev-image.yaml`: updated the dev image smoke test to run for `main` and use the branch image tag.
+- `D:\ai-lanbot\docker\kubernetes.yaml`: changed default Kubernetes images to GHCR for the fork.
+- `D:\ai-lanbot\skills\skills\langbot-plugin-dev\references\test-env-setup.md`: changed test environment images to GHCR for the fork.
+- `D:\ai-lanbot\docs\ONE_CLICK_DEPLOY.md`: documented fast image deployment, fallback build mode, health checks, and first-admin setup.
+- `D:\ai-lanbot\README.md`: documented health-checked one-click deployment and the absence of a default username/password.
+- `D:\ai-lanbot\README_CN.md`: documented health-checked one-click deployment and the `/register` first-admin flow in Chinese.
+- `D:\ai-lanbot\progress.md`: appended this task log entry.
+- Rollback: before commit, run `git restore .github/workflows/build-dev-image.yaml .github/workflows/build-docker-image.yml .github/workflows/test-dev-image.yaml Dockerfile README.md README_CN.md docker/docker-compose.yaml docker/kubernetes.yaml docs/ONE_CLICK_DEPLOY.md scripts/one-click-deploy.sh skills/skills/langbot-plugin-dev/references/test-env-setup.md progress.md`; after commit, run `git revert <commit>` to undo this task as a single change set.

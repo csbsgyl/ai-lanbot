@@ -8,7 +8,7 @@ One-click Linux deployment:
 tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-The deployment script automatically detects whether GitHub and Docker Hub direct access work. It falls back to `https://github.xiaohangyun.org` for source downloads and `https://docker.xiaohangyun.org` for Docker base images when needed. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
+The deployment script automatically detects whether GitHub and Docker image access work, prefers a prebuilt fork image for speed, and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It reports success only after the HTTP health check passes. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
 
 ---
 
