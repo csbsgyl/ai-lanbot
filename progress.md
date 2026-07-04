@@ -59,3 +59,21 @@
 - `D:\ai-lanbot\pyproject.toml`: updated repository metadata for this fork while preserving the upstream link.
 - `D:\ai-lanbot\progress.md`: appended this task log entry.
 - Rollback: revert this task with `git revert <commit>` after it is committed, and set the GitHub repository visibility back to private if needed.
+
+## 2026-07-04 - Task: Make GitHub repository public and verify accelerated access
+### What was done
+- Changed `csbsgyl/ai-lanbot` from private to public on GitHub.
+- Verified anonymous public access through the GitHub API.
+- Verified accelerated anonymous access through `https://github.xiaohangyun.org` for README, the one-click deployment script, and the main branch tarball.
+
+### Testing
+- GitHub API reported `private=false` and `visibility=public` for `csbsgyl/ai-lanbot`.
+- `https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/README_CN.md` returned HTTP 206.
+- `https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh` returned HTTP 206.
+- `https://github.xiaohangyun.org/https://github.com/csbsgyl/ai-lanbot/archive/refs/heads/main.tar.gz` returned HTTP 200.
+- Downloaded the remote deployment script through the accelerator and verified it with `bash -n`.
+
+### Notes
+- `GitHub repository settings`: changed visibility to public for `csbsgyl/ai-lanbot`.
+- `D:\ai-lanbot\progress.md`: appended this public-access verification log entry.
+- Rollback: change repository visibility back to private in GitHub repository settings or via GitHub API with `private=true`.
