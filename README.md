@@ -1,3 +1,17 @@
+## Ai-LanBot Fork
+
+This repository is a secondary-development fork of [langbot-app/LangBot](https://github.com/langbot-app/LangBot), published as [csbsgyl/ai-lanbot](https://github.com/csbsgyl/ai-lanbot). The original Apache-2.0 license and upstream attribution are preserved. Fork-specific notes are in [docs/FORK_NOTICE.md](docs/FORK_NOTICE.md).
+
+One-click Linux deployment:
+
+```bash
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
+```
+
+The deployment script automatically detects whether GitHub direct download works and falls back to `https://github.xiaohangyun.org` when needed. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
+
+---
+
 <p align="center">
 <a href="https://langbot.app">
 <img width="130" src="res/logo-blue.png" alt="LangBot"/>

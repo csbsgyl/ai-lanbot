@@ -31,3 +31,31 @@
 - `D:\ai-lanbot\.git\config`: updated repository remotes so local development pushes to the user's GitHub repository while retaining the original upstream remote.
 - `D:\ai-lanbot\progress.md`: appended this publish log entry.
 - Rollback: remove the GitHub repository `csbsgyl/ai-lanbot` from GitHub, or locally restore the original remote with `git remote remove origin; git remote rename upstream origin`.
+
+## 2026-07-04 - Task: Prepare public fork attribution and one-click deployment
+### What was done
+- Added clear fork attribution at the top of the English and Chinese README files, including upstream and fork repository links.
+- Added public fork notice documentation and one-click deployment documentation.
+- Added a Linux one-click deployment script that installs Docker when needed, downloads or updates this fork, builds local Docker images from source, and starts LangBot with Docker Compose.
+- Added automatic GitHub direct-download detection and fallback to `https://github.xiaohangyun.org` for repository archive downloads; the README command also falls back to the accelerator when fetching the script itself.
+- Added a Docker Compose local-build override so deployments use this fork's source instead of the upstream `rockchin/langbot` image.
+- Updated Dockerfile `nsjail` source retrieval to use release archive downloads with accelerator fallback instead of a direct GitHub git clone.
+
+### Testing
+- Ran `bash -n scripts/one-click-deploy.sh` with Git Bash successfully.
+- Verified `https://github.xiaohangyun.org` supports raw GitHub file proxying and GitHub archive tarball proxying.
+- Verified accelerated `nsjail` archive download returns HTTP 200.
+- Ran a content-level secret scan; only documented example secrets and test fixture tokens were found.
+- Docker runtime verification was not run locally because Docker is not installed on this workstation.
+
+### Notes
+- `D:\ai-lanbot\README.md`: added fork attribution and the one-click Linux deployment command.
+- `D:\ai-lanbot\README_CN.md`: added Chinese fork attribution and the one-click Linux deployment command.
+- `D:\ai-lanbot\docs\FORK_NOTICE.md`: documented upstream attribution, license preservation, and fork-specific changes.
+- `D:\ai-lanbot\docs\ONE_CLICK_DEPLOY.md`: documented one-click deployment behavior, optional variables, and maintenance commands.
+- `D:\ai-lanbot\scripts\one-click-deploy.sh`: added automated Linux deployment with direct GitHub and accelerator fallback logic.
+- `D:\ai-lanbot\docker\docker-compose.local-build.yaml`: added a source-build compose override for this fork.
+- `D:\ai-lanbot\Dockerfile`: changed `nsjail` source retrieval to archive download with accelerator fallback.
+- `D:\ai-lanbot\pyproject.toml`: updated repository metadata for this fork while preserving the upstream link.
+- `D:\ai-lanbot\progress.md`: appended this task log entry.
+- Rollback: revert this task with `git revert <commit>` after it is committed, and set the GitHub repository visibility back to private if needed.

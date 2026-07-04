@@ -17,12 +17,16 @@ ARG NSJAIL_VERSION=3.6
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates git build-essential \
+        ca-certificates curl build-essential \
         autoconf bison flex libtool pkg-config \
         protobuf-compiler libprotobuf-dev libnl-route-3-dev \
-    && git clone --depth 1 --branch "${NSJAIL_VERSION}" https://github.com/google/nsjail.git /nsjail \
+    && (curl -fsSL --connect-timeout 8 --max-time 60 "https://github.com/google/nsjail/archive/refs/tags/${NSJAIL_VERSION}.tar.gz" -o /tmp/nsjail.tar.gz \
+        || curl -fsSL --connect-timeout 15 --max-time 120 "https://github.xiaohangyun.org/https://github.com/google/nsjail/archive/refs/tags/${NSJAIL_VERSION}.tar.gz" -o /tmp/nsjail.tar.gz) \
+    && mkdir -p /nsjail \
+    && tar -xzf /tmp/nsjail.tar.gz -C /nsjail --strip-components=1 \
     && make -C /nsjail \
     && install -m 0755 /nsjail/nsjail /usr/local/bin/nsjail \
+    && rm -f /tmp/nsjail.tar.gz \
     && rm -rf /var/lib/apt/lists/*
 
 FROM python:3.12.7-slim

@@ -1,3 +1,17 @@
+## Ai-LanBot 二开版
+
+本仓库是基于 [langbot-app/LangBot](https://github.com/langbot-app/LangBot) 的二开版本，发布仓库为 [csbsgyl/ai-lanbot](https://github.com/csbsgyl/ai-lanbot)。原项目 Apache-2.0 许可证与上游署名已保留，二开说明见 [docs/FORK_NOTICE.md](docs/FORK_NOTICE.md)。
+
+Linux 服务器一键部署：
+
+```bash
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
+```
+
+部署脚本会自动检测 GitHub 直连是否可用；不可用或过慢时自动使用 `https://github.xiaohangyun.org` 下载源码，用户不需要手动填写加速站。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
+
+---
+
 <p align="center">
 <a href="https://langbot.app">
 <img width="130" src="res/logo-blue.png" alt="LangBot"/>
