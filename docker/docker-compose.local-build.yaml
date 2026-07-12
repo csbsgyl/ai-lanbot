@@ -27,4 +27,4 @@ services:
     image: csbsgyl/ai-lanbot:local
     ports:
       - "${LANGBOT_HTTP_PORT:-5300}:5300"
-      - "2280-2285:2280-2285"
+      - "${LANBOT_REVERSE_PORT_MAPPING:-2280-2285:2280-2285}"

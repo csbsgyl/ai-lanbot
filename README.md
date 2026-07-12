@@ -11,13 +11,24 @@ the bundled IDC plugin instead of an LLM. Production data is supplied by a
 separate normalized gateway documented in
 [`docs/IDC_QUERY_GATEWAY.md`](docs/IDC_QUERY_GATEWAY.md).
 
-One-click Linux deployment:
+One-click production deployment:
 
 ```bash
-tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp" production
 ```
 
-The deployment script automatically detects whether GitHub and Docker image access work, prefers a prebuilt fork image for speed, and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It installs the IDC query plugin automatically and reports success only after the Plugin Runtime and HTTP health checks pass. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
+One-click isolated test deployment:
+
+```bash
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp" test
+```
+
+`test` defaults to `/opt/ai-lanbot-test`, port `5301`, and a build of the
+latest source. `production` defaults to `/opt/ai-lanbot`, port `5300`,
+and a prebuilt image. Their containers, ports, configuration, and data are
+isolated so both can run on the same server.
+
+The deployment script automatically detects whether GitHub and Docker image access work and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It installs the IDC query plugin automatically and reports success only after the Plugin Runtime and HTTP health checks pass. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
 
 ---
 

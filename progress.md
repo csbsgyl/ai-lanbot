@@ -215,3 +215,29 @@
 ### Notes
 - Real CRM, monitoring, protection, billing, and ticketing integration still requires the upstream endpoint and credential details defined by the operator; no undocumented business API was invented.
 - The implementation was later committed and pushed as `a984c04` after explicit user approval; a follow-up formatting-only commit addressed the full CI Ruff format check.
+
+## 2026-07-12 - Task: Add one-click test and production deployment modes
+### What was done
+- Extended the existing `scripts/one-click-deploy.sh` entry point with explicit `test` and `production` arguments; no deployment environment variables are required for the normal workflow.
+- Made test mode build the latest source under an isolated install directory, Compose project, container set, HTTP/debug ports, reverse-connection ports, configuration, bindings, and data directory.
+- Kept production mode backward compatible with the existing install directory, container names, ports, Compose project, and prebuilt-image-first behavior.
+- Parameterized Docker Compose container names and published ports so test and production can run concurrently on one Linux server.
+- Added smoke coverage for mode resolution, production defaults, argument precedence, and Compose resource parameterization.
+- Updated the English and Chinese README files and the one-click deployment guide with direct test and production commands.
+
+### Testing
+- Ran `bash -n scripts/one-click-deploy.sh` successfully.
+- Ran ShellCheck 0.10.0 on `scripts/one-click-deploy.sh` successfully.
+- Ran `.venv\\Scripts\\python.exe -m pytest tests/smoke -q`: 19 tests passed, including all four deployment-mode tests through GNU Bash.
+- Ran the focused IDC and QQ Official suite: 35 tests passed.
+- Ran `ruff check src/langbot tests --output-format=concise` successfully.
+- Ran `ruff format src tests/smoke/test_one_click_deploy.py --check` successfully.
+- Parsed both Docker Compose files and the bundled plugin manifest with PyYAML successfully.
+- Ran `git diff --check` successfully.
+- Docker Compose runtime verification was not run because Docker is not installed on this workstation.
+
+### Notes
+- Test deployment command ends with `bash "$tmp" test`; production deployment ends with `bash "$tmp" production`.
+- Test defaults: `/opt/ai-lanbot-test`, HTTP `5301`, plugin debug `5402`, reverse ports `3280-3285`, Compose project `ai-lanbot-test`.
+- Production defaults remain `/opt/ai-lanbot`, HTTP `5300`, plugin debug `5401`, reverse ports `2280-2285`, Compose project `docker`.
+- Rollback before commit: restore the modified tracked files and remove `tests/smoke/test_one_click_deploy.py`; after commit, use `git revert <commit>`.

@@ -9,13 +9,23 @@
 大模型自由执行。实际业务数据通过独立查询网关接入，接口约定见
 [docs/IDC_QUERY_GATEWAY.md](docs/IDC_QUERY_GATEWAY.md)。
 
-Linux 服务器一键部署：
+Linux 正式环境一键部署：
 
 ```bash
-tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp" production
 ```
 
-部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用，默认优先拉取本二开仓库的预构建镜像以加快部署；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本会自动安装 IDC 查询插件，并且只有在插件运行时和 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
+Linux 测试环境一键部署：
+
+```bash
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp" test
+```
+
+`test` 默认安装到 `/opt/ai-lanbot-test`、使用端口 `5301` 并构建最新源码；
+`production` 默认安装到 `/opt/ai-lanbot`、使用端口 `5300` 并优先拉取预构建镜像。
+两套环境使用独立容器名、端口、配置和数据目录，可以在同一台服务器并存。
+
+部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本会自动安装 IDC 查询插件，并且只有在插件运行时和 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
 
 ---
 

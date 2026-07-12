@@ -11,19 +11,19 @@ DOCKER_ACCELERATOR="https://docker.xiaohangyun.org"
 DOCKER_ACCELERATOR_PREFIX="docker.xiaohangyun.org/library/"
 DOCKERHUB_IMAGE="${REPO_SLUG}:latest"
 GHCR_IMAGE="ghcr.io/${REPO_SLUG}:latest"
-DEPLOY_MODE="${LANBOT_DEPLOY_MODE:-image}"
+DEPLOY_ENVIRONMENT="${LANBOT_ENVIRONMENT:-production}"
+DEPLOY_MODE="${LANBOT_DEPLOY_MODE:-}"
 ALLOW_BUILD_FALLBACK="${LANBOT_ALLOW_BUILD_FALLBACK:-true}"
 SOURCE_MODE="${LANBOT_SOURCE_MODE:-archive}"
-
-if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-  DEFAULT_INSTALL_DIR="/opt/${REPO_NAME}"
-else
-  DEFAULT_INSTALL_DIR="${HOME}/${REPO_NAME}"
-fi
-
-INSTALL_DIR="${LANBOT_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+INSTALL_DIR="${LANBOT_INSTALL_DIR:-}"
 COMPOSE_PROFILES="${LANBOT_COMPOSE_PROFILES:-}"
-HTTP_PORT="${LANBOT_HTTP_PORT:-5300}"
+HTTP_PORT="${LANBOT_HTTP_PORT:-}"
+COMPOSE_PROJECT="${LANBOT_COMPOSE_PROJECT_NAME:-}"
+LANGBOT_CONTAINER_NAME="${LANBOT_CONTAINER_NAME:-}"
+PLUGIN_RUNTIME_CONTAINER_NAME="${LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME:-}"
+BOX_CONTAINER_NAME="${LANBOT_BOX_CONTAINER_NAME:-}"
+PLUGIN_DEBUG_PORT="${LANBOT_PLUGIN_DEBUG_PORT:-}"
+REVERSE_PORT_MAPPING="${LANBOT_REVERSE_PORT_MAPPING:-}"
 
 log() {
   printf '[ai-lanbot] %s\n' "$*"
@@ -32,6 +32,80 @@ log() {
 die() {
   printf '[ai-lanbot] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: one-click-deploy.sh [test|production]
+
+  test        Isolated test deployment. Builds the latest source locally.
+              Defaults: /opt/ai-lanbot-test, HTTP 5301.
+  production  Production deployment. Uses a prebuilt image when available.
+              Defaults: /opt/ai-lanbot, HTTP 5300. This is the default.
+
+Advanced LANBOT_* environment variables can override these defaults.
+EOF
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      test|testing|--test)
+        DEPLOY_ENVIRONMENT="test"
+        ;;
+      production|prod|--production)
+        DEPLOY_ENVIRONMENT="production"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown argument: $1. Use test, production, or --help."
+        ;;
+    esac
+    shift
+  done
+}
+
+configure_deployment() {
+  local install_root
+
+  if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+    install_root="/opt"
+  else
+    install_root="${HOME}"
+  fi
+
+  case "$DEPLOY_ENVIRONMENT" in
+    test|testing)
+      DEPLOY_ENVIRONMENT="test"
+      [ -n "$INSTALL_DIR" ] || INSTALL_DIR="${install_root}/${REPO_NAME}-test"
+      [ -n "$DEPLOY_MODE" ] || DEPLOY_MODE="build"
+      [ -n "$HTTP_PORT" ] || HTTP_PORT="5301"
+      [ -n "$COMPOSE_PROJECT" ] || COMPOSE_PROJECT="ai-lanbot-test"
+      [ -n "$LANGBOT_CONTAINER_NAME" ] || LANGBOT_CONTAINER_NAME="langbot_test"
+      [ -n "$PLUGIN_RUNTIME_CONTAINER_NAME" ] || PLUGIN_RUNTIME_CONTAINER_NAME="langbot_plugin_runtime_test"
+      [ -n "$BOX_CONTAINER_NAME" ] || BOX_CONTAINER_NAME="langbot_box_test"
+      [ -n "$PLUGIN_DEBUG_PORT" ] || PLUGIN_DEBUG_PORT="5402"
+      [ -n "$REVERSE_PORT_MAPPING" ] || REVERSE_PORT_MAPPING="3280-3285:2280-2285"
+      ;;
+    production|prod)
+      DEPLOY_ENVIRONMENT="production"
+      [ -n "$INSTALL_DIR" ] || INSTALL_DIR="${install_root}/${REPO_NAME}"
+      [ -n "$DEPLOY_MODE" ] || DEPLOY_MODE="image"
+      [ -n "$HTTP_PORT" ] || HTTP_PORT="5300"
+      [ -n "$COMPOSE_PROJECT" ] || COMPOSE_PROJECT="docker"
+      [ -n "$LANGBOT_CONTAINER_NAME" ] || LANGBOT_CONTAINER_NAME="langbot"
+      [ -n "$PLUGIN_RUNTIME_CONTAINER_NAME" ] || PLUGIN_RUNTIME_CONTAINER_NAME="langbot_plugin_runtime"
+      [ -n "$BOX_CONTAINER_NAME" ] || BOX_CONTAINER_NAME="langbot_box"
+      [ -n "$PLUGIN_DEBUG_PORT" ] || PLUGIN_DEBUG_PORT="5401"
+      [ -n "$REVERSE_PORT_MAPPING" ] || REVERSE_PORT_MAPPING="2280-2285:2280-2285"
+      ;;
+    *)
+      die "Unsupported deployment environment: ${DEPLOY_ENVIRONMENT}. Use test or production."
+      ;;
+  esac
 }
 
 need_cmd() {
@@ -381,8 +455,15 @@ write_env() {
   [ -f "$env_file" ] || : > "$env_file"
 
   docker_image_prefix="$(resolve_docker_image_prefix)"
+  set_env_key "$env_file" "COMPOSE_PROJECT_NAME" "$COMPOSE_PROJECT"
+  set_env_key "$env_file" "LANBOT_ENVIRONMENT" "$DEPLOY_ENVIRONMENT"
   set_env_key "$env_file" "LANGBOT_HTTP_PORT" "$HTTP_PORT"
   set_env_key "$env_file" "LANGBOT_BOX_ROOT" "${INSTALL_DIR}/docker/data/box"
+  set_env_key "$env_file" "LANBOT_CONTAINER_NAME" "$LANGBOT_CONTAINER_NAME"
+  set_env_key "$env_file" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "$PLUGIN_RUNTIME_CONTAINER_NAME"
+  set_env_key "$env_file" "LANBOT_BOX_CONTAINER_NAME" "$BOX_CONTAINER_NAME"
+  set_env_key "$env_file" "LANBOT_PLUGIN_DEBUG_PORT" "$PLUGIN_DEBUG_PORT"
+  set_env_key "$env_file" "LANBOT_REVERSE_PORT_MAPPING" "$REVERSE_PORT_MAPPING"
   if [ "$COMPOSE_PROFILES" = "all" ] || [ "$COMPOSE_PROFILES" = "box" ]; then
     box_enabled="true"
   fi
@@ -413,7 +494,7 @@ wait_for_plugin_runtime() {
 
   for _ in $(seq 1 60); do
     status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' \
-      langbot_plugin_runtime 2>/dev/null || true)"
+      "$PLUGIN_RUNTIME_CONTAINER_NAME" 2>/dev/null || true)"
     if [ "$status" = "healthy" ]; then
       return 0
     fi
@@ -430,7 +511,7 @@ remove_disabled_box() {
   local compose
 
   [ -z "$COMPOSE_PROFILES" ] || return 0
-  docker inspect langbot_box >/dev/null 2>&1 || return 0
+  docker inspect "$BOX_CONTAINER_NAME" >/dev/null 2>&1 || return 0
 
   compose="$(compose_cmd)"
   cd "${INSTALL_DIR}/docker"
@@ -446,7 +527,7 @@ start_services() {
   compose="$(compose_cmd)"
   cd "${INSTALL_DIR}/docker"
   if [ "$DEPLOY_MODE" = "build" ]; then
-    log "Building the Plugin Runtime from source. This is the slow fallback path."
+    log "Building the Plugin Runtime from source."
     if ! $compose -f docker-compose.yaml -f docker-compose.local-build.yaml up -d --build langbot_plugin_runtime; then
       show_compose_diagnostics
       die "Plugin Runtime build/start failed. Deployment was not completed."
@@ -524,6 +605,8 @@ print_success_info() {
   fi
 
   log "Deployment completed and health check passed."
+  log "Environment: ${DEPLOY_ENVIRONMENT}"
+  log "Install directory: ${INSTALL_DIR}"
   log "Local URL: ${local_url}"
   log "Remote URL: ${remote_url}"
 
@@ -562,9 +645,24 @@ verify_deployment() {
 main() {
   local runtime_image=""
 
+  parse_args "$@"
+  configure_deployment
+
   [ "$(uname -s)" = "Linux" ] || die "This script supports Linux servers only."
   need_cmd curl
   need_cmd tar
+
+  case "$HTTP_PORT" in
+    ''|*[!0-9]*) die "LANBOT_HTTP_PORT must be a numeric TCP port." ;;
+  esac
+  if [ "$HTTP_PORT" -lt 1 ] || [ "$HTTP_PORT" -gt 65535 ]; then
+    die "LANBOT_HTTP_PORT must be between 1 and 65535."
+  fi
+
+  log "Deployment environment: ${DEPLOY_ENVIRONMENT}"
+  log "Deployment mode: ${DEPLOY_MODE}"
+  log "Install directory: ${INSTALL_DIR}"
+  log "HTTP port: ${HTTP_PORT}"
 
   case "$DEPLOY_MODE" in
     image|build) ;;
@@ -600,4 +698,6 @@ main() {
   print_success_info
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

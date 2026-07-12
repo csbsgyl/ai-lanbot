@@ -6,12 +6,12 @@ services:
 
   langbot_plugin_runtime:
     image: ${LANBOT_IMAGE:-ghcr.io/csbsgyl/ai-lanbot:latest}
-    container_name: langbot_plugin_runtime
+    container_name: ${LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME:-langbot_plugin_runtime}
     volumes:
       - ./data/plugins:/app/data/plugins
       - ./data/idc-query:/app/data/idc-query
     ports:
-      - 5401:5401
+      - "${LANBOT_PLUGIN_DEBUG_PORT:-5401}:5401"
     restart: on-failure
     environment:
       - TZ=Asia/Shanghai
@@ -33,7 +33,7 @@ services:
   # ``BOX__ENABLED=false`` in the langbot service env below) to match.
   langbot_box:
     image: ${LANBOT_IMAGE:-ghcr.io/csbsgyl/ai-lanbot:latest}
-    container_name: langbot_box
+    container_name: ${LANBOT_BOX_CONTAINER_NAME:-langbot_box}
     profiles: ["box", "all"]
     volumes:
       # Keep the source and target path identical because langbot_box uses the
@@ -61,7 +61,7 @@ services:
 
   langbot:
     image: ${LANBOT_IMAGE:-ghcr.io/csbsgyl/ai-lanbot:latest}
-    container_name: langbot
+    container_name: ${LANBOT_CONTAINER_NAME:-langbot}
     depends_on:
       - langbot_plugin_runtime
     volumes:
@@ -80,7 +80,7 @@ services:
       - BOX__DOCKER__CPU_LIMIT_ENABLED=${LANGBOT_BOX_DOCKER_CPU_LIMIT_ENABLED:-true}
     ports:
       - "${LANGBOT_HTTP_PORT:-5300}:5300"  # For web ui and webhook callback
-      - 2280-2285:2280-2285  # For platform reverse connection
+      - "${LANBOT_REVERSE_PORT_MAPPING:-2280-2285:2280-2285}"  # For platform reverse connection
     networks:
       - langbot_network
 
