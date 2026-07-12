@@ -2,13 +2,20 @@
 
 本仓库是基于 [langbot-app/LangBot](https://github.com/langbot-app/LangBot) 的二开版本，发布仓库为 [csbsgyl/ai-lanbot](https://github.com/csbsgyl/ai-lanbot)。原项目 Apache-2.0 许可证与上游署名已保留，二开说明见 [docs/FORK_NOTICE.md](docs/FORK_NOTICE.md)。
 
+### IDC 自助查询方向
+
+本分支主要面向 QQ 官方群机器人场景：客户在群内 `@机器人` 后，可以执行会员绑定、IP、
+防护、封禁、流量、业务、工单和余额查询。固定查询由内置 IDC 插件确定性处理，不会交给
+大模型自由执行。实际业务数据通过独立查询网关接入，接口约定见
+[docs/IDC_QUERY_GATEWAY.md](docs/IDC_QUERY_GATEWAY.md)。
+
 Linux 服务器一键部署：
 
 ```bash
 tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用，默认优先拉取本二开仓库的预构建镜像以加快部署；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本只有在 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
+部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用，默认优先拉取本二开仓库的预构建镜像以加快部署；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本会自动安装 IDC 查询插件，并且只有在插件运行时和 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
 
 ---
 
@@ -94,8 +101,12 @@ uvx langbot
 ```bash
 git clone https://github.com/csbsgyl/ai-lanbot
 cd ai-lanbot/docker
-docker compose --profile all up -d
+mkdir -p data/plugins && cp -a ../bundled_plugins/idc_query data/plugins/
+docker compose up -d
 ```
+
+IDC 查询默认不启动 Box；需要沙箱工具时改用
+`LANBOT_BOX_ENABLED=true docker compose --profile all up -d`。
 
 ### 一键云部署
 

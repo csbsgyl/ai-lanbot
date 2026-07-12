@@ -19,8 +19,11 @@ The script also checks Docker image access automatically. By default it starts f
 - Starts LangBot from a prebuilt fork image by default.
 - Falls back to local source build only when no prebuilt image is reachable, or when `LANBOT_DEPLOY_MODE=build` is set.
 - Automatically uses the Docker accelerator for runtime/base images when direct Docker access is unavailable and the accelerator exposes the required image.
-- Starts LangBot with Docker Compose profile `all`.
+- Starts the LangBot and Plugin Runtime core services without the optional Box profile.
+- Installs or updates the bundled IDC query plugin under `docker/data/plugins/idc_query`.
+- Preserves IDC group bindings separately under `docker/data/idc-query` during source updates.
 - Keeps persistent data under `docker/data`.
+- Waits for the Plugin Runtime to become healthy before starting LangBot.
 - Waits for `/api/v1/system/info` to pass before reporting success.
 - Prints the local URL, remote URL, first-time setup URL, login URL, and maintenance commands.
 
@@ -43,9 +46,31 @@ LANBOT_DEPLOY_MODE=image
 LANBOT_ALLOW_BUILD_FALLBACK=true
 LANBOT_IMAGE=ghcr.io/csbsgyl/ai-lanbot:latest
 LANBOT_SOURCE_MODE=archive
+IDC_QUERY_API_BASE_URL=https://query.example.com
+IDC_QUERY_API_TOKEN=replace-with-a-service-token
+IDC_QUERY_TIMEOUT_SECONDS=8
+IDC_QUERY_VERIFY_TLS=true
 ```
 
 These are optional. The default command works without setting them.
+
+`LANBOT_COMPOSE_PROFILES` is empty by default, so the IDC deployment does not
+start the optional Box service or mount the host Docker socket. Set it to `all`
+only when sandbox tools and Box-managed skills are intentionally required. If
+an older deployment previously started Box, a default one-click upgrade stops
+and removes that container without deleting its persisted data directory.
+
+The IDC plugin is installed even when its gateway is not configured. In that
+state it can display its command menu, but binding and data queries return a
+configuration notice instead of fabricated results. The deployment variables
+are written to `docker/data/idc-query/config.env` with owner-only permissions
+and preserved on later one-click upgrades. The plugin reads this mounted file
+directly because the Linux Plugin Runtime intentionally starts plugin processes
+with a clean environment. The token is not exposed through Docker container
+environment metadata and must not be committed.
+
+The normalized gateway contract is documented in
+[`IDC_QUERY_GATEWAY.md`](IDC_QUERY_GATEWAY.md).
 
 Use `LANBOT_DEPLOY_MODE=build` only when you intentionally want to build the local checkout on the server. That path is slower because it installs frontend/backend dependencies and compiles the sandbox binary.
 
@@ -53,7 +78,7 @@ Use `LANBOT_DEPLOY_MODE=build` only when you intentionally want to build the loc
 
 ```bash
 cd /opt/ai-lanbot/docker
-docker compose --profile all ps
+docker compose ps
 docker compose logs -f langbot
-docker compose --profile all down
+docker compose down
 ```

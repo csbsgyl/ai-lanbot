@@ -9,12 +9,19 @@ services:
     container_name: langbot_plugin_runtime
     volumes:
       - ./data/plugins:/app/data/plugins
+      - ./data/idc-query:/app/data/idc-query
     ports:
       - 5401:5401
     restart: on-failure
     environment:
       - TZ=Asia/Shanghai
     command: ["uv", "run", "--no-sync", "-m", "langbot_plugin.cli.__init__", "rt"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 5400), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     networks:
       - langbot_network
 
@@ -55,11 +62,14 @@ services:
   langbot:
     image: ${LANBOT_IMAGE:-ghcr.io/csbsgyl/ai-lanbot:latest}
     container_name: langbot
+    depends_on:
+      - langbot_plugin_runtime
     volumes:
       - ./data:/app/data
     restart: on-failure
     environment:
       - TZ=Asia/Shanghai
+      - BOX__ENABLED=${LANBOT_BOX_ENABLED:-false}
       # Unified env-override convention: SECTION__SUBSECTION__KEY overrides the
       # matching config.yaml field (see LoadConfigStage). These map onto
       # box.* and are forwarded to the Box runtime via INIT RPC.

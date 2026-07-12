@@ -2,13 +2,22 @@
 
 This repository is a secondary-development fork of [langbot-app/LangBot](https://github.com/langbot-app/LangBot), published as [csbsgyl/ai-lanbot](https://github.com/csbsgyl/ai-lanbot). The original Apache-2.0 license and upstream attribution are preserved. Fork-specific notes are in [docs/FORK_NOTICE.md](docs/FORK_NOTICE.md).
 
+### IDC self-service direction
+
+This fork is primarily developed for QQ Official group bots. Customers can
+mention the bot to bind an account and query IP assets, protection, blocks,
+traffic, businesses, tickets, and balance. Deterministic commands are handled by
+the bundled IDC plugin instead of an LLM. Production data is supplied by a
+separate normalized gateway documented in
+[`docs/IDC_QUERY_GATEWAY.md`](docs/IDC_QUERY_GATEWAY.md).
+
 One-click Linux deployment:
 
 ```bash
 tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-The deployment script automatically detects whether GitHub and Docker image access work, prefers a prebuilt fork image for speed, and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It reports success only after the HTTP health check passes. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
+The deployment script automatically detects whether GitHub and Docker image access work, prefers a prebuilt fork image for speed, and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It installs the IDC query plugin automatically and reports success only after the Plugin Runtime and HTTP health checks pass. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
 
 ---
 
@@ -94,8 +103,13 @@ uvx langbot
 ```bash
 git clone https://github.com/csbsgyl/ai-lanbot
 cd ai-lanbot/docker
-docker compose --profile all up -d
+mkdir -p data/plugins && cp -a ../bundled_plugins/idc_query data/plugins/
+docker compose up -d
 ```
+
+The IDC deployment leaves Box disabled by default. Use
+`LANBOT_BOX_ENABLED=true docker compose --profile all up -d` only when sandbox
+tools are required.
 
 ### One-Click Cloud Deploy
 

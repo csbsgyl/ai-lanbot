@@ -14,7 +14,12 @@ import langbot_plugin.api.entities.builtin.platform.entities as platform_entitie
 from langbot.libs.qq_official_api.api import QQOfficialClient
 from langbot.libs.qq_official_api.qqofficialevent import QQOfficialEvent
 from ...utils import image
-from ..logger import EventLogger
+
+if typing.TYPE_CHECKING:
+    from ..logger import EventLogger
+
+
+_BOT_MENTION_PATTERN = re.compile(r'<@![^>]+>')
 
 
 def _is_base64_data(value: str) -> bool:
@@ -94,11 +99,13 @@ class QQOfficialMessageConverter(abstract_platform_adapter.AbstractMessageConver
     async def target2yiri(message: str, message_id: str, pic_url: str, content_type):
         yiri_msg_list = []
         yiri_msg_list.append(platform_message.Source(id=message_id, time=datetime.datetime.now()))
-        if pic_url is not None:
+        if pic_url:
             base64_url = await image.get_qq_official_image_base64(pic_url=pic_url, content_type=content_type)
             yiri_msg_list.append(platform_message.Image(base64=base64_url))
 
-        yiri_msg_list.append(platform_message.Plain(text=message))
+        clean_message = _BOT_MENTION_PATTERN.sub('', str(message or '')).strip()
+        if clean_message:
+            yiri_msg_list.append(platform_message.Plain(text=clean_message))
         chain = platform_message.MessageChain(yiri_msg_list)
         return chain
 
@@ -144,12 +151,12 @@ class QQOfficialEventConverter(abstract_platform_adapter.AbstractEventConverter)
             yiri_chain.insert(0, platform_message.At(target='justbot'))
 
             sender = platform_entities.GroupMember(
-                id=event.group_openid,
-                member_name=event.t,
+                id=event.member_openid or event.group_openid,
+                member_name=event.username or event.member_openid or event.t,
                 permission='MEMBER',
                 group=platform_entities.Group(
                     id=event.group_openid,
-                    name='MEMBER',
+                    name=event.group_openid,
                     permission=platform_entities.Permission.Member,
                 ),
                 special_title='',
@@ -164,12 +171,12 @@ class QQOfficialEventConverter(abstract_platform_adapter.AbstractEventConverter)
         if event.t == 'AT_MESSAGE_CREATE':
             yiri_chain.insert(0, platform_message.At(target='justbot'))
             sender = platform_entities.GroupMember(
-                id=event.channel_id,
-                member_name=event.t,
+                id=event.member_openid or event.d_author_id or event.channel_id,
+                member_name=event.username or event.member_openid or event.t,
                 permission='MEMBER',
                 group=platform_entities.Group(
                     id=event.channel_id,
-                    name='MEMBER',
+                    name=event.channel_id,
                     permission=platform_entities.Permission.Member,
                 ),
                 special_title='',

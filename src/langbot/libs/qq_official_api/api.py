@@ -156,7 +156,8 @@ class QQOfficialClient:
             'channel_id': d.get('channel_id', {}),
             'username': d.get('author', {}).get('username', {}),
             'guild_id': d.get('guild_id', {}),
-            'member_openid': d.get('author', {}).get('openid', {}),
+            'member_openid': d.get('author', {}).get('member_openid')
+            or d.get('author', {}).get('openid', {}),
             'group_openid': d.get('group_openid', {}),
         }
         attachments = d.get('attachments', [])

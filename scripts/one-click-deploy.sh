@@ -22,7 +22,7 @@ else
 fi
 
 INSTALL_DIR="${LANBOT_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
-COMPOSE_PROFILES="${LANBOT_COMPOSE_PROFILES:-all}"
+COMPOSE_PROFILES="${LANBOT_COMPOSE_PROFILES:-}"
 HTTP_PORT="${LANBOT_HTTP_PORT:-5300}"
 
 log() {
@@ -58,6 +58,16 @@ compose_cmd() {
     return 0
   fi
   return 1
+}
+
+compose_with_profiles() {
+  local compose
+  compose="$(compose_cmd)"
+  if [ -n "$COMPOSE_PROFILES" ]; then
+    $compose --profile "$COMPOSE_PROFILES" "$@"
+  else
+    $compose "$@"
+  fi
 }
 
 install_docker() {
@@ -141,6 +151,48 @@ set_env_key() {
   else
     printf '%s=%s\n' "$key" "$value" >> "$file"
   fi
+}
+
+set_env_key_if_missing() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+
+  if ! grep -q "^${key}=" "$file"; then
+    set_env_key "$file" "$key" "$value"
+  fi
+}
+
+install_bundled_plugins() {
+  local source_dir="${INSTALL_DIR}/bundled_plugins/idc_query"
+  local plugin_dir="${INSTALL_DIR}/docker/data/plugins/idc_query"
+  local state_dir="${INSTALL_DIR}/docker/data/idc-query"
+
+  [ -f "${source_dir}/manifest.yaml" ] || die "Bundled IDC query plugin is missing from the source tree."
+  mkdir -p "$(dirname "$plugin_dir")" "$state_dir"
+  rm -rf "$plugin_dir"
+  mkdir -p "$plugin_dir"
+  cp -a "${source_dir}/." "$plugin_dir/"
+  chmod 700 "$state_dir"
+  log "Installed bundled IDC query plugin."
+}
+
+write_idc_query_config() {
+  local config_file="${INSTALL_DIR}/docker/data/idc-query/config.env"
+
+  mkdir -p "$(dirname "$config_file")"
+  [ -f "$config_file" ] || : > "$config_file"
+  set_env_key_if_missing "$config_file" "IDC_QUERY_API_BASE_URL" ""
+  set_env_key_if_missing "$config_file" "IDC_QUERY_API_TOKEN" ""
+  [ -n "${IDC_QUERY_API_BASE_URL:-}" ] \
+    && set_env_key "$config_file" "IDC_QUERY_API_BASE_URL" "$IDC_QUERY_API_BASE_URL"
+  [ -n "${IDC_QUERY_API_TOKEN:-}" ] \
+    && set_env_key "$config_file" "IDC_QUERY_API_TOKEN" "$IDC_QUERY_API_TOKEN"
+  [ -n "${IDC_QUERY_TIMEOUT_SECONDS:-}" ] \
+    && set_env_key "$config_file" "IDC_QUERY_TIMEOUT_SECONDS" "$IDC_QUERY_TIMEOUT_SECONDS"
+  [ -n "${IDC_QUERY_VERIFY_TLS:-}" ] \
+    && set_env_key "$config_file" "IDC_QUERY_VERIFY_TLS" "$IDC_QUERY_VERIFY_TLS"
+  chmod 600 "$config_file"
 }
 
 is_managed_install_dir() {
@@ -323,6 +375,7 @@ write_env() {
   local runtime_image="${1:-}"
   local env_file="${INSTALL_DIR}/docker/.env"
   local docker_image_prefix
+  local box_enabled="false"
 
   mkdir -p "$(dirname "$env_file")"
   [ -f "$env_file" ] || : > "$env_file"
@@ -330,11 +383,17 @@ write_env() {
   docker_image_prefix="$(resolve_docker_image_prefix)"
   set_env_key "$env_file" "LANGBOT_HTTP_PORT" "$HTTP_PORT"
   set_env_key "$env_file" "LANGBOT_BOX_ROOT" "${INSTALL_DIR}/docker/data/box"
+  if [ "$COMPOSE_PROFILES" = "all" ] || [ "$COMPOSE_PROFILES" = "box" ]; then
+    box_enabled="true"
+  fi
+  set_env_key "$env_file" "LANBOT_BOX_ENABLED" "$box_enabled"
   set_env_key "$env_file" "LANBOT_DEPLOY_MODE" "$DEPLOY_MODE"
   set_env_key "$env_file" "LANBOT_DOCKER_IMAGE_PREFIX" "$docker_image_prefix"
   if [ -n "$runtime_image" ]; then
     set_env_key "$env_file" "LANBOT_IMAGE" "$runtime_image"
   fi
+  chmod 600 "$env_file"
+  write_idc_query_config
 }
 
 show_compose_diagnostics() {
@@ -342,9 +401,43 @@ show_compose_diagnostics() {
   compose="$(compose_cmd)"
   cd "${INSTALL_DIR}/docker"
   log "Docker Compose status:"
-  $compose --profile "$COMPOSE_PROFILES" ps || true
+  compose_with_profiles ps || true
   log "Recent LangBot logs:"
   $compose logs --tail=80 langbot || true
+  log "Recent Plugin Runtime logs:"
+  $compose logs --tail=80 langbot_plugin_runtime || true
+}
+
+wait_for_plugin_runtime() {
+  local status
+
+  for _ in $(seq 1 60); do
+    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' \
+      langbot_plugin_runtime 2>/dev/null || true)"
+    if [ "$status" = "healthy" ]; then
+      return 0
+    fi
+    if [ "$status" = "unhealthy" ]; then
+      return 1
+    fi
+    sleep 2
+  done
+
+  return 1
+}
+
+remove_disabled_box() {
+  local compose
+
+  [ -z "$COMPOSE_PROFILES" ] || return 0
+  docker inspect langbot_box >/dev/null 2>&1 || return 0
+
+  compose="$(compose_cmd)"
+  cd "${INSTALL_DIR}/docker"
+  log "Removing the previously started Box container because Box is disabled."
+  if ! $compose --profile all rm -s -f langbot_box; then
+    die "The disabled Box container could not be removed."
+  fi
 }
 
 start_services() {
@@ -353,16 +446,36 @@ start_services() {
   compose="$(compose_cmd)"
   cd "${INSTALL_DIR}/docker"
   if [ "$DEPLOY_MODE" = "build" ]; then
-    log "Building from source and starting services. This is the slow fallback path."
-    if ! $compose -f docker-compose.yaml -f docker-compose.local-build.yaml --profile "$COMPOSE_PROFILES" up -d --build; then
+    log "Building the Plugin Runtime from source. This is the slow fallback path."
+    if ! $compose -f docker-compose.yaml -f docker-compose.local-build.yaml up -d --build langbot_plugin_runtime; then
+      show_compose_diagnostics
+      die "Plugin Runtime build/start failed. Deployment was not completed."
+    fi
+    log "Waiting for the Plugin Runtime health check."
+    if ! wait_for_plugin_runtime; then
+      show_compose_diagnostics
+      die "Plugin Runtime did not become healthy. Deployment was not completed."
+    fi
+    log "Building and starting the remaining services from source."
+    if ! compose_with_profiles -f docker-compose.yaml -f docker-compose.local-build.yaml up -d --build; then
       show_compose_diagnostics
       die "Service build/start failed. Deployment was not completed."
     fi
     return 0
   fi
 
-  log "Starting services from prebuilt image: ${runtime_image}"
-  if ! $compose -f docker-compose.yaml --profile "$COMPOSE_PROFILES" up -d; then
+  log "Starting the Plugin Runtime from prebuilt image: ${runtime_image}"
+  if ! $compose -f docker-compose.yaml up -d langbot_plugin_runtime; then
+    show_compose_diagnostics
+    die "Plugin Runtime start failed. Deployment was not completed."
+  fi
+  log "Waiting for the Plugin Runtime health check."
+  if ! wait_for_plugin_runtime; then
+    show_compose_diagnostics
+    die "Plugin Runtime did not become healthy. Deployment was not completed."
+  fi
+  log "Starting the remaining services from prebuilt image: ${runtime_image}"
+  if ! compose_with_profiles -f docker-compose.yaml up -d; then
     show_compose_diagnostics
     die "Service start failed. Deployment was not completed."
   fi
@@ -370,9 +483,8 @@ start_services() {
 
 wait_for_http() {
   local url="$1"
-  local attempt
 
-  for attempt in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if curl -fsS --connect-timeout 2 --max-time 5 "$url" >/dev/null 2>&1; then
       return 0
     fi
@@ -424,7 +536,17 @@ print_success_info() {
     log "Create the first administrator account on /register, then use /login."
   fi
 
-  log "Status: cd ${INSTALL_DIR}/docker && $(compose_cmd) --profile ${COMPOSE_PROFILES} ps"
+  if grep -Eq '^IDC_QUERY_API_BASE_URL=.+$' "${INSTALL_DIR}/docker/data/idc-query/config.env"; then
+    log "IDC query plugin: installed and query gateway configured."
+  else
+    log "IDC query plugin: installed; configure docker/data/idc-query/config.env before using queries."
+  fi
+
+  if [ -n "$COMPOSE_PROFILES" ]; then
+    log "Status: cd ${INSTALL_DIR}/docker && $(compose_cmd) --profile ${COMPOSE_PROFILES} ps"
+  else
+    log "Status: cd ${INSTALL_DIR}/docker && $(compose_cmd) ps"
+  fi
   log "Logs: cd ${INSTALL_DIR}/docker && $(compose_cmd) logs -f langbot"
 }
 
@@ -448,12 +570,17 @@ main() {
     image|build) ;;
     *) die "Unsupported LANBOT_DEPLOY_MODE=${DEPLOY_MODE}. Use image or build." ;;
   esac
+  case "$COMPOSE_PROFILES" in
+    ''|box|all) ;;
+    *) die "Unsupported LANBOT_COMPOSE_PROFILES=${COMPOSE_PROFILES}. Use box, all, or leave it empty." ;;
+  esac
 
   if [ ! -d "${INSTALL_DIR}/docker" ]; then
     check_port
   fi
   ensure_docker_ready
   fetch_source
+  install_bundled_plugins
 
   if [ "$DEPLOY_MODE" = "image" ]; then
     if ! runtime_image="$(resolve_runtime_image)"; then
@@ -467,6 +594,7 @@ main() {
   fi
 
   write_env "$runtime_image"
+  remove_disabled_box
   start_services "$runtime_image"
   verify_deployment
   print_success_info

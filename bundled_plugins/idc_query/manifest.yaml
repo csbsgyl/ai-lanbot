@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Plugin
+metadata:
+  author: csbsgyl
+  name: idc-query
+  repository: https://github.com/csbsgyl/ai-lanbot
+  version: 0.1.0
+  description:
+    en_US: Deterministic IDC self-service queries for QQ Official bots.
+    zh_Hans: 面向 QQ 官方机器人的 IDC 自助查询插件。
+    zh_Hant: 面向 QQ 官方機器人的 IDC 自助查詢插件。
+  label:
+    en_US: IDC Query
+    zh_Hans: IDC 自助查询
+    zh_Hant: IDC 自助查詢
+spec:
+  config:
+    - name: api_base_url
+      id: api_base_url
+      type: string
+      label:
+        en_US: Query gateway URL
+        zh_Hans: 查询网关地址
+        zh_Hant: 查詢網關地址
+      description:
+        en_US: Base URL of the normalized IDC query gateway. Environment variable IDC_QUERY_API_BASE_URL takes precedence.
+        zh_Hans: 标准化 IDC 查询网关地址；环境变量 IDC_QUERY_API_BASE_URL 优先。
+        zh_Hant: 標準化 IDC 查詢網關地址；環境變數 IDC_QUERY_API_BASE_URL 優先。
+      required: false
+      default: ""
+    - name: timeout_seconds
+      id: timeout_seconds
+      type: integer
+      label:
+        en_US: Gateway timeout
+        zh_Hans: 网关超时秒数
+        zh_Hant: 網關逾時秒數
+      required: true
+      default: 8
+    - name: exclusive_mode
+      id: exclusive_mode
+      type: boolean
+      label:
+        en_US: Exclusive command mode
+        zh_Hans: 独占指令模式
+        zh_Hant: 獨佔指令模式
+      description:
+        en_US: Reply with the menu instead of forwarding unknown QQ group mentions to an LLM.
+        zh_Hans: 未识别的 QQ 群指令直接返回菜单，不再交给大模型。
+        zh_Hant: 未識別的 QQ 群指令直接返回選單，不再交給大模型。
+      required: true
+      default: true
+    - name: sensitive_binder_only
+      id: sensitive_binder_only
+      type: boolean
+      label:
+        en_US: Restrict sensitive queries
+        zh_Hans: 限制敏感查询
+        zh_Hant: 限制敏感查詢
+      description:
+        en_US: Only the member who bound the group can query businesses, tickets, and balance.
+        zh_Hans: 仅允许执行群绑定的成员查询业务、工单和余额。
+        zh_Hant: 僅允許執行群綁定的成員查詢業務、工單和餘額。
+      required: true
+      default: true
+    - name: verify_tls
+      id: verify_tls
+      type: boolean
+      label:
+        en_US: Verify gateway TLS
+        zh_Hans: 验证网关 TLS 证书
+        zh_Hant: 驗證網關 TLS 憑證
+      required: true
+      default: true
+    - name: allow_simulated_events
+      id: allow_simulated_events
+      type: boolean
+      label:
+        en_US: Allow simulated group events
+        zh_Hans: 允许模拟群事件
+        zh_Hant: 允許模擬群事件
+      description:
+        en_US: Enable only when testing the plugin through LangBot WebUI group simulation.
+        zh_Hans: 仅在通过 LangBot WebUI 模拟群消息测试插件时启用。
+        zh_Hant: 僅在透過 LangBot WebUI 模擬群訊息測試插件時啟用。
+      required: true
+      default: false
+  components:
+    EventListener:
+      fromDirs:
+        - path: components/events/
+          maxDepth: 1
+execution:
+  python:
+    path: main.py
+    attr: IDCQueryPlugin

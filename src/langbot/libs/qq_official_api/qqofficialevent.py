@@ -36,7 +36,7 @@ class QQOfficialEvent(dict):
         """
         作者id
         """
-        return self.get('id', {})
+        return self.get('d_author_id') or self.get('id', {})
 
     @property
     def content(self) -> str:
@@ -85,7 +85,7 @@ class QQOfficialEvent(dict):
         """
         成员openid
         """
-        return self.get('openid', {})
+        return self.get('member_openid') or self.get('openid', {})
 
     @property
     def attachments(self) -> str:

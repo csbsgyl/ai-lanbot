@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: EventListener
+metadata:
+  name: idc_query
+  label:
+    en_US: IDC Query Commands
+    zh_Hans: IDC 查询指令
+    zh_Hant: IDC 查詢指令
+spec:
+execution:
+  python:
+    path: idc_query.py
+    attr: IDCQueryEventListener

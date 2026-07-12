@@ -165,3 +165,53 @@
 - `D:\ai-lanbot\README_CN.md`: documented health-checked one-click deployment and the `/register` first-admin flow in Chinese.
 - `D:\ai-lanbot\progress.md`: appended this task log entry.
 - Rollback: before commit, run `git restore .github/workflows/build-dev-image.yaml .github/workflows/build-docker-image.yml .github/workflows/test-dev-image.yaml Dockerfile README.md README_CN.md docker/docker-compose.yaml docker/kubernetes.yaml docs/ONE_CLICK_DEPLOY.md scripts/one-click-deploy.sh skills/skills/langbot-plugin-dev/references/test-env-setup.md progress.md`; after commit, run `git revert <commit>` to undo this task as a single change set.
+
+## 2026-07-11 - Task: Add the IDC QQ self-service query workflow and one-click deployment
+### What was done
+- Added the bundled `idc-query` plugin for QQ Official group mentions with deterministic help, binding, unbinding, IP, protection, block, traffic, business, ticket, and balance commands.
+- Added persistent per-group member bindings, per-group mutation locking, QQ message deduplication, IPv4/IPv6 validation, safe member-ID parsing, binder-only sensitive queries, and secret-field filtering.
+- Added a normalized HTTP query gateway client and documented its authentication, tenant identity, endpoint, response, audit, and data-redaction contract.
+- Corrected QQ Official event normalization so standard `author.member_openid` and legacy `author.openid` both preserve the sender identity while `group_openid` remains the group identity.
+- Made the IDC listener reject QQ group events without a stable member identity, preventing the group ID from being treated as a user identity for sensitive operations.
+- Fixed text-only QQ messages so they do not invoke the image downloader and kept platform changes limited to event translation.
+- Extended the one-click script to install/update the bundled plugin, preserve bindings and gateway configuration, restrict configuration file permissions, health-check Plugin Runtime before LangBot, and keep the optional Box runtime disabled unless explicitly requested.
+- Updated Docker Compose, English/Chinese README files, and one-click deployment documentation for the IDC deployment path.
+
+### Testing
+- Ran `.venv\\Scripts\\python.exe -m pytest tests/unit_tests/idc_query tests/unit_tests/platform/test_qqofficial_event_converter.py -q --basetemp .test-tmp`: 29 tests passed.
+- Ran Ruff on the modified QQ adapter, bundled plugin, and focused tests successfully.
+- Ran ShellCheck on `scripts/one-click-deploy.sh` successfully.
+- Parsed the Docker Compose and plugin YAML files with PyYAML successfully.
+- Ran `lbp build` in `bundled_plugins/idc_query`; built `csbsgyl-idc-query-0.1.0.lbpkg` successfully.
+- Docker Compose runtime verification was not run because Docker is not installed on this workstation.
+- The broader routing-rules suite was not available in the intentionally minimal test environment because full application dependencies such as SQLAlchemy are not installed.
+
+### Notes
+- Gateway credentials are stored in `docker/data/idc-query/config.env` with owner-only permissions and are not committed or exposed through Docker environment metadata.
+- Group bindings are stored separately in `docker/data/idc-query/bindings.json` and survive one-click source upgrades.
+- The gateway remains responsible for read-only upstream credentials, tenant ownership enforcement, rate limiting, and audit logging.
+- No user-provided GitHub credential was stored in the repository or deployment configuration.
+- Rollback before commit: restore the modified tracked files and remove `bundled_plugins/idc_query`, `docs/IDC_QUERY_GATEWAY.md`, `tests/unit_tests/idc_query`, and `tests/unit_tests/platform/test_qqofficial_event_converter.py`; after commit, use `git revert <commit>`.
+
+## 2026-07-12 - Task: Harden the IDC QQ flow for real group messages and upgrades
+### What was done
+- Removed QQ bot mention markup such as `<@!123456789>` before command parsing while retaining a second defensive normalization inside the plugin parser.
+- Added safe handling for empty or image-only QQ message content.
+- Changed unexpected IDC processing failures to block default/postorder handling and return a fixed error instead of falling through to an LLM.
+- Required the binding gateway to return the exact verified member ID before persisting a group binding.
+- Extended response redaction to common English and Chinese token, password, key, and credential field names.
+- Added stable IDs to every plugin configuration field and verified that the gateway token is not exposed in the WebUI plugin form schema.
+- Updated one-click upgrades to remove a previously running Box container when Box is now disabled, without deleting its persisted data directory.
+- Restricted `LANBOT_COMPOSE_PROFILES` to the supported empty, `box`, and `all` values.
+
+### Testing
+- Ran the focused IDC and QQ Official suite: 35 tests passed.
+- Ran Ruff on all modified Python files and focused tests successfully.
+- Ran ShellCheck on `scripts/one-click-deploy.sh` successfully.
+- Parsed the Docker Compose and plugin YAML files with PyYAML successfully.
+- Built `csbsgyl-idc-query-0.1.0.lbpkg` successfully with `lbp build`.
+- Docker Compose runtime verification remains unavailable because Docker is not installed on this workstation.
+
+### Notes
+- Real CRM, monitoring, protection, billing, and ticketing integration still requires the upstream endpoint and credential details defined by the operator; no undocumented business API was invented.
+- No repository commit or push was made as part of this task.
