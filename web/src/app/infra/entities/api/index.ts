@@ -360,7 +360,12 @@ export interface ApiRespSystemInfo {
 }
 
 export type SystemUpdateState =
-  'idle' | 'queued' | 'checking' | 'deploying' | 'success' | 'failed';
+  | 'idle'
+  | 'queued'
+  | 'checking'
+  | 'deploying'
+  | 'success'
+  | 'failed';
 
 export interface ApiRespSystemUpdate {
   enabled: boolean;
