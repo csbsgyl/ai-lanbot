@@ -92,6 +92,57 @@ test.describe('authenticated app shell', () => {
     );
   });
 
+  test('sidebar update control opens the managed update flow', async ({
+    page,
+  }) => {
+    await installLangBotApiMocks(page, { authenticated: true });
+
+    await page.goto('/home/bots');
+    await page.getByRole('button', { name: 'Manage updates' }).click();
+
+    await expect(
+      page.getByRole('heading', { name: 'Software Update' }),
+    ).toBeVisible();
+    await expect(page.getByText('11111111')).toBeVisible();
+    await expect(page.getByText('22222222')).toBeVisible();
+    await expect(page.getByText('Update available')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Update now' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Install update?' }),
+    ).toBeVisible();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Update now' })
+      .click();
+    await expect(page.getByText('Update request submitted')).toBeVisible();
+  });
+
+  test('managed update flow fits a mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installLangBotApiMocks(page, { authenticated: true });
+
+    await page.goto('/home/bots');
+    await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
+    await page.getByRole('button', { name: 'Manage updates' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: 'Check for updates' }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: 'Update now' }),
+    ).toBeVisible();
+
+    const bounds = await dialog.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+  });
+
   test('/home/skills?action=create creates a manual skill', async ({
     page,
   }) => {

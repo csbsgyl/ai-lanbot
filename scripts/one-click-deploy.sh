@@ -9,21 +9,30 @@ GITHUB_BASE="https://github.com"
 GITHUB_ACCELERATOR="https://github.xiaohangyun.org"
 DOCKER_ACCELERATOR="https://docker.xiaohangyun.org"
 DOCKER_ACCELERATOR_PREFIX="docker.xiaohangyun.org/library/"
-DOCKERHUB_IMAGE="${REPO_SLUG}:latest"
-GHCR_IMAGE="ghcr.io/${REPO_SLUG}:latest"
-DEPLOY_ENVIRONMENT="${LANBOT_ENVIRONMENT:-production}"
-DEPLOY_MODE="${LANBOT_DEPLOY_MODE:-}"
+DEPLOY_ENVIRONMENT="production"
+DEPLOY_MODE="${LANBOT_DEPLOY_MODE:-image}"
 ALLOW_BUILD_FALLBACK="${LANBOT_ALLOW_BUILD_FALLBACK:-true}"
 SOURCE_MODE="${LANBOT_SOURCE_MODE:-archive}"
-INSTALL_DIR="${LANBOT_INSTALL_DIR:-}"
 COMPOSE_PROFILES="${LANBOT_COMPOSE_PROFILES:-}"
-HTTP_PORT="${LANBOT_HTTP_PORT:-}"
-COMPOSE_PROJECT="${LANBOT_COMPOSE_PROJECT_NAME:-}"
-LANGBOT_CONTAINER_NAME="${LANBOT_CONTAINER_NAME:-}"
-PLUGIN_RUNTIME_CONTAINER_NAME="${LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME:-}"
-BOX_CONTAINER_NAME="${LANBOT_BOX_CONTAINER_NAME:-}"
-PLUGIN_DEBUG_PORT="${LANBOT_PLUGIN_DEBUG_PORT:-}"
-REVERSE_PORT_MAPPING="${LANBOT_REVERSE_PORT_MAPPING:-}"
+HTTP_PORT="${LANBOT_HTTP_PORT:-5300}"
+COMPOSE_PROJECT="${LANBOT_COMPOSE_PROJECT_NAME:-docker}"
+LANGBOT_CONTAINER_NAME="${LANBOT_CONTAINER_NAME:-langbot}"
+PLUGIN_RUNTIME_CONTAINER_NAME="${LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME:-langbot_plugin_runtime}"
+BOX_CONTAINER_NAME="${LANBOT_BOX_CONTAINER_NAME:-langbot_box}"
+PLUGIN_DEBUG_PORT="${LANBOT_PLUGIN_DEBUG_PORT:-5401}"
+REVERSE_PORT_MAPPING="${LANBOT_REVERSE_PORT_MAPPING:-2280-2285:2280-2285}"
+TARGET_REVISION="${LANBOT_TARGET_REVISION:-}"
+IMAGE_WAIT_SECONDS="${LANBOT_IMAGE_WAIT_SECONDS:-0}"
+UPDATE_ENABLED="false"
+HOST_UPDATER_PATH="/usr/local/libexec/ai-lanbot-host-update"
+
+if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+  DEFAULT_INSTALL_DIR="/opt/${REPO_NAME}"
+else
+  DEFAULT_INSTALL_DIR="${HOME}/${REPO_NAME}"
+fi
+
+INSTALL_DIR="${LANBOT_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 
 log() {
   printf '[ai-lanbot] %s\n' "$*"
@@ -36,12 +45,10 @@ die() {
 
 usage() {
   cat <<'EOF'
-Usage: one-click-deploy.sh [test|production]
+Usage: one-click-deploy.sh [production]
 
-  test        Isolated test deployment. Builds the latest source locally.
-              Defaults: /opt/ai-lanbot-test, HTTP 5301.
-  production  Production deployment. Uses a prebuilt image when available.
-              Defaults: /opt/ai-lanbot, HTTP 5300. This is the default.
+Deploys or updates the production instance. The production argument is
+optional; running the script without arguments performs the same deployment.
 
 Advanced LANBOT_* environment variables can override these defaults.
 EOF
@@ -50,62 +57,18 @@ EOF
 parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      test|testing|--test)
-        DEPLOY_ENVIRONMENT="test"
-        ;;
       production|prod|--production)
-        DEPLOY_ENVIRONMENT="production"
         ;;
       -h|--help)
         usage
         exit 0
         ;;
       *)
-        die "Unknown argument: $1. Use test, production, or --help."
+        die "Unknown argument: $1. This script deploys production only."
         ;;
     esac
     shift
   done
-}
-
-configure_deployment() {
-  local install_root
-
-  if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-    install_root="/opt"
-  else
-    install_root="${HOME}"
-  fi
-
-  case "$DEPLOY_ENVIRONMENT" in
-    test|testing)
-      DEPLOY_ENVIRONMENT="test"
-      [ -n "$INSTALL_DIR" ] || INSTALL_DIR="${install_root}/${REPO_NAME}-test"
-      [ -n "$DEPLOY_MODE" ] || DEPLOY_MODE="build"
-      [ -n "$HTTP_PORT" ] || HTTP_PORT="5301"
-      [ -n "$COMPOSE_PROJECT" ] || COMPOSE_PROJECT="ai-lanbot-test"
-      [ -n "$LANGBOT_CONTAINER_NAME" ] || LANGBOT_CONTAINER_NAME="langbot_test"
-      [ -n "$PLUGIN_RUNTIME_CONTAINER_NAME" ] || PLUGIN_RUNTIME_CONTAINER_NAME="langbot_plugin_runtime_test"
-      [ -n "$BOX_CONTAINER_NAME" ] || BOX_CONTAINER_NAME="langbot_box_test"
-      [ -n "$PLUGIN_DEBUG_PORT" ] || PLUGIN_DEBUG_PORT="5402"
-      [ -n "$REVERSE_PORT_MAPPING" ] || REVERSE_PORT_MAPPING="3280-3285:2280-2285"
-      ;;
-    production|prod)
-      DEPLOY_ENVIRONMENT="production"
-      [ -n "$INSTALL_DIR" ] || INSTALL_DIR="${install_root}/${REPO_NAME}"
-      [ -n "$DEPLOY_MODE" ] || DEPLOY_MODE="image"
-      [ -n "$HTTP_PORT" ] || HTTP_PORT="5300"
-      [ -n "$COMPOSE_PROJECT" ] || COMPOSE_PROJECT="docker"
-      [ -n "$LANGBOT_CONTAINER_NAME" ] || LANGBOT_CONTAINER_NAME="langbot"
-      [ -n "$PLUGIN_RUNTIME_CONTAINER_NAME" ] || PLUGIN_RUNTIME_CONTAINER_NAME="langbot_plugin_runtime"
-      [ -n "$BOX_CONTAINER_NAME" ] || BOX_CONTAINER_NAME="langbot_box"
-      [ -n "$PLUGIN_DEBUG_PORT" ] || PLUGIN_DEBUG_PORT="5401"
-      [ -n "$REVERSE_PORT_MAPPING" ] || REVERSE_PORT_MAPPING="2280-2285:2280-2285"
-      ;;
-    *)
-      die "Unsupported deployment environment: ${DEPLOY_ENVIRONMENT}. Use test or production."
-      ;;
-  esac
 }
 
 need_cmd() {
@@ -273,8 +236,56 @@ is_managed_install_dir() {
   [ -f "${INSTALL_DIR}/pyproject.toml" ] && [ -d "${INSTALL_DIR}/docker" ] && [ -f "${INSTALL_DIR}/scripts/one-click-deploy.sh" ]
 }
 
+is_valid_revision() {
+  [[ "$1" =~ ^[0-9a-fA-F]{40}$ ]]
+}
+
+is_safe_systemd_install_dir() {
+  [[ "$INSTALL_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+    && [[ "/${INSTALL_DIR#/}/" != *"/../"* ]]
+}
+
+repository_archive_url() {
+  local base_url="$1"
+
+  if [ -n "$TARGET_REVISION" ]; then
+    printf '%s/%s/archive/%s.tar.gz' "$base_url" "$REPO_SLUG" "$TARGET_REVISION"
+  else
+    printf '%s/%s/archive/refs/heads/%s.tar.gz' "$base_url" "$REPO_SLUG" "$REPO_BRANCH"
+  fi
+}
+
+resolve_target_revision() {
+  local api_url response
+
+  if [ -n "$TARGET_REVISION" ]; then
+    is_valid_revision "$TARGET_REVISION" || die "LANBOT_TARGET_REVISION must be a 40-character Git commit SHA."
+    TARGET_REVISION="$(printf '%s' "$TARGET_REVISION" | tr '[:upper:]' '[:lower:]')"
+    return 0
+  fi
+
+  api_url="https://api.github.com/repos/${REPO_SLUG}/commits/${REPO_BRANCH}"
+  for url in "$api_url" "${GITHUB_ACCELERATOR}/${api_url}"; do
+    response="$(
+      curl -fsSL \
+        -H 'Accept: application/vnd.github.sha' \
+        --connect-timeout 8 \
+        --max-time 20 \
+        "$url" 2>/dev/null || true
+    )"
+    response="$(printf '%s' "$response" | tr -d '\r\n')"
+    if is_valid_revision "$response"; then
+      TARGET_REVISION="$(printf '%s' "$response" | tr '[:upper:]' '[:lower:]')"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 can_use_direct_github() {
-  local probe_url="${GITHUB_BASE}/${REPO_SLUG}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
+  local probe_url
+  probe_url="$(repository_archive_url "$GITHUB_BASE")"
   curl -fsL --connect-timeout 8 --max-time 15 --range 0-0 -o /dev/null "$probe_url" >/dev/null 2>&1
 }
 
@@ -290,15 +301,49 @@ docker_accelerator_has_required_images() {
 }
 
 docker_accelerator_has_runtime_image() {
-  curl -fsL --connect-timeout 8 --max-time 20 "${DOCKER_ACCELERATOR}/v2/${REPO_SLUG}/tags/list" | grep -q '"latest"'
+  local image_tag="$1"
+  curl -fsL --connect-timeout 8 --max-time 20 "${DOCKER_ACCELERATOR}/v2/${REPO_SLUG}/tags/list" \
+    | grep -Fq "\"${image_tag}\""
 }
 
 image_manifest_available() {
   run_with_timeout 30s docker manifest inspect "$1" >/dev/null 2>&1
 }
 
+resolve_runtime_image_once() {
+  local candidate dockerhub_image ghcr_image image_tag
+  image_tag="${TARGET_REVISION:-latest}"
+  dockerhub_image="${REPO_SLUG}:${image_tag}"
+  ghcr_image="ghcr.io/${REPO_SLUG}:${image_tag}"
+
+  if can_reach_dockerhub; then
+    log "Checking Docker Hub prebuilt image: ${dockerhub_image}" >&2
+    if image_manifest_available "$dockerhub_image"; then
+      printf '%s' "$dockerhub_image"
+      return 0
+    fi
+  fi
+
+  if docker_accelerator_has_runtime_image "$image_tag"; then
+    candidate="${DOCKER_ACCELERATOR#https://}/${dockerhub_image}"
+    log "Checking accelerated Docker image: ${candidate}" >&2
+    if image_manifest_available "$candidate"; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  fi
+
+  log "Checking GHCR prebuilt image: ${ghcr_image}" >&2
+  if image_manifest_available "$ghcr_image"; then
+    printf '%s' "$ghcr_image"
+    return 0
+  fi
+
+  return 1
+}
+
 resolve_runtime_image() {
-  local candidate
+  local deadline remaining wait_for
 
   if [ -n "${LANBOT_IMAGE:-}" ]; then
     log "Using custom runtime image: ${LANBOT_IMAGE}" >&2
@@ -310,30 +355,21 @@ resolve_runtime_image() {
     return 1
   fi
 
-  if can_reach_dockerhub; then
-    log "Checking Docker Hub prebuilt image: ${DOCKERHUB_IMAGE}" >&2
-    if image_manifest_available "$DOCKERHUB_IMAGE"; then
-      printf '%s' "$DOCKERHUB_IMAGE"
+  deadline=$((SECONDS + IMAGE_WAIT_SECONDS))
+  while true; do
+    if resolve_runtime_image_once; then
       return 0
     fi
-  fi
-
-  if docker_accelerator_has_runtime_image; then
-    candidate="${DOCKER_ACCELERATOR#https://}/${DOCKERHUB_IMAGE}"
-    log "Checking accelerated Docker image: ${candidate}" >&2
-    if image_manifest_available "$candidate"; then
-      printf '%s' "$candidate"
-      return 0
+    if [ "$IMAGE_WAIT_SECONDS" -eq 0 ] || [ "$SECONDS" -ge "$deadline" ]; then
+      return 1
     fi
-  fi
 
-  log "Checking GHCR prebuilt image: ${GHCR_IMAGE}" >&2
-  if image_manifest_available "$GHCR_IMAGE"; then
-    printf '%s' "$GHCR_IMAGE"
-    return 0
-  fi
-
-  return 1
+    remaining=$((deadline - SECONDS))
+    wait_for=30
+    [ "$remaining" -lt "$wait_for" ] && wait_for="$remaining"
+    log "The revision image is not published yet; checking again in ${wait_for}s." >&2
+    sleep "$wait_for"
+  done
 }
 
 resolve_docker_image_prefix() {
@@ -360,8 +396,9 @@ resolve_docker_image_prefix() {
 
 download_archive() {
   local archive="$1"
-  local direct_url="${GITHUB_BASE}/${REPO_SLUG}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
-  local accel_url="${GITHUB_ACCELERATOR}/${direct_url}"
+  local direct_url accel_url
+  direct_url="$(repository_archive_url "$GITHUB_BASE")"
+  accel_url="${GITHUB_ACCELERATOR}/${direct_url}"
 
   if can_use_direct_github; then
     log "GitHub direct download is available."
@@ -409,12 +446,13 @@ install_from_archive() {
 
 fetch_source() {
   local repo_url="${GITHUB_BASE}/${REPO_SLUG}.git"
+  local source_ref="${TARGET_REVISION:-$REPO_BRANCH}"
 
   if [ -d "${INSTALL_DIR}/.git" ]; then
     log "Updating existing checkout at ${INSTALL_DIR}."
     git -C "$INSTALL_DIR" remote set-url origin "$repo_url"
-    if run_with_timeout 90s git -C "$INSTALL_DIR" fetch --depth 1 origin "$REPO_BRANCH" \
-      && git -C "$INSTALL_DIR" checkout -B "$REPO_BRANCH" "origin/${REPO_BRANCH}"; then
+    if run_with_timeout 90s git -C "$INSTALL_DIR" fetch --depth 1 origin "$source_ref" \
+      && git -C "$INSTALL_DIR" checkout -B "$REPO_BRANCH" FETCH_HEAD; then
       return 0
     fi
     log "git update failed. Falling back to archive download."
@@ -433,7 +471,7 @@ fetch_source() {
 
   mkdir -p "$(dirname "$INSTALL_DIR")"
 
-  if [ "$SOURCE_MODE" = "git" ] && command -v git >/dev/null 2>&1; then
+  if [ "$SOURCE_MODE" = "git" ] && [ -z "$TARGET_REVISION" ] && command -v git >/dev/null 2>&1; then
     log "Trying git clone from GitHub."
     if run_with_timeout 90s git clone --depth 1 --branch "$REPO_BRANCH" "$repo_url" "$INSTALL_DIR"; then
       return 0
@@ -443,6 +481,68 @@ fetch_source() {
   fi
 
   install_from_archive
+}
+
+install_host_updater() {
+  local template_dir="${INSTALL_DIR}/deploy/systemd"
+  local update_dir="${INSTALL_DIR}/docker/data/update"
+  local update_request_dir="${INSTALL_DIR}/docker/data/update-request"
+  local tmp_dir escaped_install_dir
+
+  UPDATE_ENABLED="false"
+  mkdir -p "$update_dir" "$update_request_dir"
+  chmod 755 "$update_dir"
+  chmod 700 "$update_request_dir"
+  if [ ! -f "${update_request_dir}/request.json" ]; then
+    printf '{}\n' > "${update_request_dir}/request.json"
+  fi
+  if [ ! -f "${update_dir}/status.json" ]; then
+    printf '{"state":"idle","message":"ready","current_revision":"","target_revision":"","updated_at":""}\n' \
+      > "${update_dir}/status.json"
+  fi
+  chmod 600 "${update_request_dir}/request.json"
+  chmod 644 "${update_dir}/status.json"
+
+  if ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; then
+    log "systemd is unavailable; in-app automatic updates will be disabled."
+    return 0
+  fi
+  if [ -n "${LANBOT_IMAGE:-}" ]; then
+    log "A custom runtime image is configured; in-app automatic updates will be disabled."
+    return 0
+  fi
+  if ! is_safe_systemd_install_dir; then
+    log "The install path cannot be represented safely in a systemd unit; in-app automatic updates will be disabled."
+    return 0
+  fi
+  if [ ! -f "${template_dir}/ai-lanbot-update.service.in" ] \
+    || [ ! -f "${template_dir}/ai-lanbot-update.path.in" ] \
+    || [ ! -f "${INSTALL_DIR}/scripts/host-update.sh" ]; then
+    log "Managed updater files are missing; in-app automatic updates will be disabled."
+    return 0
+  fi
+
+  tmp_dir="$(mktemp -d)"
+  escaped_install_dir="$(printf '%s' "$INSTALL_DIR" | sed 's/[&|\\]/\\&/g')"
+  sed "s|@INSTALL_DIR@|${escaped_install_dir}|g" \
+    "${template_dir}/ai-lanbot-update.service.in" > "${tmp_dir}/ai-lanbot-update.service"
+  sed "s|@INSTALL_DIR@|${escaped_install_dir}|g" \
+    "${template_dir}/ai-lanbot-update.path.in" > "${tmp_dir}/ai-lanbot-update.path"
+
+  if ! as_root install -d -m 0755 "$(dirname "$HOST_UPDATER_PATH")" \
+    || ! as_root install -m 0755 "${INSTALL_DIR}/scripts/host-update.sh" "$HOST_UPDATER_PATH" \
+    || ! as_root install -m 0644 "${tmp_dir}/ai-lanbot-update.service" /etc/systemd/system/ai-lanbot-update.service \
+    || ! as_root install -m 0644 "${tmp_dir}/ai-lanbot-update.path" /etc/systemd/system/ai-lanbot-update.path \
+    || ! as_root systemctl daemon-reload \
+    || ! as_root systemctl enable --now ai-lanbot-update.path; then
+    rm -rf "$tmp_dir"
+    log "Could not activate the managed updater; in-app automatic updates will be disabled."
+    return 0
+  fi
+
+  rm -rf "$tmp_dir"
+  UPDATE_ENABLED="true"
+  log "Installed the managed in-app updater."
 }
 
 write_env() {
@@ -469,7 +569,13 @@ write_env() {
   fi
   set_env_key "$env_file" "LANBOT_BOX_ENABLED" "$box_enabled"
   set_env_key "$env_file" "LANBOT_DEPLOY_MODE" "$DEPLOY_MODE"
+  set_env_key "$env_file" "LANBOT_SOURCE_MODE" "$SOURCE_MODE"
+  set_env_key "$env_file" "LANBOT_BRANCH" "$REPO_BRANCH"
   set_env_key "$env_file" "LANBOT_DOCKER_IMAGE_PREFIX" "$docker_image_prefix"
+  set_env_key "$env_file" "LANBOT_BUILD_REVISION" "$TARGET_REVISION"
+  set_env_key "$env_file" "LANBOT_UPDATE_ENABLED" "$UPDATE_ENABLED"
+  set_env_key "$env_file" "LANBOT_UPDATE_REPOSITORY" "$REPO_SLUG"
+  set_env_key "$env_file" "LANBOT_UPDATE_BRANCH" "$REPO_BRANCH"
   if [ -n "$runtime_image" ]; then
     set_env_key "$env_file" "LANBOT_IMAGE" "$runtime_image"
   fi
@@ -624,6 +730,11 @@ print_success_info() {
   else
     log "IDC query plugin: installed; configure docker/data/idc-query/config.env before using queries."
   fi
+  if [ "$UPDATE_ENABLED" = "true" ]; then
+    log "In-app updates: enabled."
+  else
+    log "In-app updates: unavailable because the host updater could not be activated."
+  fi
 
   if [ -n "$COMPOSE_PROFILES" ]; then
     log "Status: cd ${INSTALL_DIR}/docker && $(compose_cmd) --profile ${COMPOSE_PROFILES} ps"
@@ -646,7 +757,6 @@ main() {
   local runtime_image=""
 
   parse_args "$@"
-  configure_deployment
 
   [ "$(uname -s)" = "Linux" ] || die "This script supports Linux servers only."
   need_cmd curl
@@ -657,6 +767,15 @@ main() {
   esac
   if [ "$HTTP_PORT" -lt 1 ] || [ "$HTTP_PORT" -gt 65535 ]; then
     die "LANBOT_HTTP_PORT must be between 1 and 65535."
+  fi
+  case "$IMAGE_WAIT_SECONDS" in
+    ''|*[!0-9]*) die "LANBOT_IMAGE_WAIT_SECONDS must be a non-negative integer." ;;
+  esac
+
+  if resolve_target_revision; then
+    log "Target revision: ${TARGET_REVISION}"
+  else
+    log "Could not resolve the branch revision; continuing with the latest branch/image reference."
   fi
 
   log "Deployment environment: ${DEPLOY_ENVIRONMENT}"
@@ -679,6 +798,7 @@ main() {
   ensure_docker_ready
   fetch_source
   install_bundled_plugins
+  install_host_updater
 
   if [ "$DEPLOY_MODE" = "image" ]; then
     if ! runtime_image="$(resolve_runtime_image)"; then

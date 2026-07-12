@@ -57,13 +57,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { LanguageSelector } from '@/components/ui/language-selector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import NewVersionDialog from '@/app/home/components/new-version-dialog/NewVersionDialog';
+import SystemUpdateDialog from '@/app/home/components/system-update-dialog/SystemUpdateDialog';
 import SettingsDialog, {
   SettingsSection,
   SETTINGS_ACTION_BY_SECTION,
   SETTINGS_SECTION_BY_ACTION,
 } from '@/app/home/components/settings-dialog/SettingsDialog';
-import { GitHubRelease } from '@/app/infra/http/CloudServiceClient';
+import { ApiRespSystemUpdate } from '@/app/infra/entities/api';
 import { useAsyncTask, AsyncTaskStatus } from '@/hooks/useAsyncTask';
 import { toast } from 'sonner';
 import {
@@ -75,6 +75,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -101,25 +102,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useSidebarData, SidebarEntityItem } from './SidebarDataContext';
 import { FeedbackPopoverContent } from './FeedbackPopover';
-
-// Compare two version strings, returns true if v1 > v2
-function compareVersions(v1: string, v2: string): boolean {
-  const clean1 = v1.replace(/^v/, '');
-  const clean2 = v2.replace(/^v/, '');
-
-  const parts1 = clean1.split('.').map((p) => parseInt(p, 10) || 0);
-  const parts2 = clean2.split('.').map((p) => parseInt(p, 10) || 0);
-
-  const maxLen = Math.max(parts1.length, parts2.length);
-
-  for (let i = 0; i < maxLen; i++) {
-    const p1 = parts1[i] || 0;
-    const p2 = parts2[i] || 0;
-    if (p1 > p2) return true;
-    if (p1 < p2) return false;
-  }
-  return false;
-}
 
 // Discord brand glyph (lucide-react has no Discord icon).
 function DiscordIcon({ className }: { className?: string }) {
@@ -1615,10 +1597,10 @@ export default function HomeSidebar({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>('models');
-  const [latestRelease, setLatestRelease] = useState<GitHubRelease | null>(
+  const [updateStatus, setUpdateStatus] = useState<ApiRespSystemUpdate | null>(
     null,
   );
-  const [hasNewVersion, setHasNewVersion] = useState(false);
+  const hasNewVersion = Boolean(updateStatus?.update_available);
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
@@ -1696,29 +1678,14 @@ export default function HomeSidebar({
         .catch(() => {});
     }
 
-    // Cloud edition is updated centrally by the operator, so end users should
-    // not see a "new version available" prompt in the sidebar. Skip the GitHub
-    // release check entirely for edition=cloud.
+    // Cloud deployments are updated by their operator. Community deployments
+    // use the managed host updater installed by the one-click script.
     if (systemInfo?.edition !== 'cloud') {
-      getCloudServiceClientSync()
-        .getLangBotReleases()
-        .then((releases) => {
-          if (releases && releases.length > 0) {
-            const latestStable = releases.find(
-              (r) => !r.prerelease && !r.draft,
-            );
-            const latest = latestStable || releases[0];
-            setLatestRelease(latest);
-
-            const currentVersion = systemInfo?.version;
-            if (currentVersion && latest.tag_name) {
-              const isNewer = compareVersions(latest.tag_name, currentVersion);
-              setHasNewVersion(isNewer);
-            }
-          }
-        })
+      httpClient
+        .getSystemUpdateStatus()
+        .then(setUpdateStatus)
         .catch((error) => {
-          console.error('Failed to fetch releases:', error);
+          console.error('Failed to fetch update status:', error);
         });
     }
 
@@ -1866,16 +1833,29 @@ export default function HomeSidebar({
                       {systemInfo?.version}
                     </span>
                     {hasNewVersion && (
-                      <Badge
-                        onClick={() => setVersionDialogOpen(true)}
-                        className="bg-red-500 hover:bg-red-600 text-white text-[0.55rem] px-1 py-0 h-3.5 cursor-pointer"
-                      >
+                      <Badge className="bg-red-500 text-white text-[0.55rem] px-1 py-0 h-3.5">
                         {t('plugins.new')}
                       </Badge>
                     )}
                   </div>
                 </div>
               </SidebarMenuButton>
+              {systemInfo?.edition !== 'cloud' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SidebarMenuAction
+                      aria-label={t('version.manageUpdates')}
+                      onClick={() => setVersionDialogOpen(true)}
+                      className={hasNewVersion ? 'text-red-500' : undefined}
+                    >
+                      <RefreshCcw />
+                    </SidebarMenuAction>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {t('version.manageUpdates')}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -2164,10 +2144,10 @@ export default function HomeSidebar({
         section={settingsSection}
         onSectionChange={handleSettingsSectionChange}
       />
-      <NewVersionDialog
+      <SystemUpdateDialog
         open={versionDialogOpen}
         onOpenChange={setVersionDialogOpen}
-        release={latestRelease}
+        onStatusChange={setUpdateStatus}
       />
     </>
   );

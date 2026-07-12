@@ -32,6 +32,7 @@ from ...api.http.service import monitoring as monitoring_service
 from ...api.http.service import skill as skill_service
 from ...skill import manager as skill_mgr
 from ...api.http.service import maintenance as maintenance_service
+from ...api.http.service import system_update as system_update_service
 from ...discover import engine as discover_engine
 from ...storage import mgr as storagemgr
 from ...utils import logcache
@@ -175,6 +176,9 @@ class BuildAppStage(stage.BootingStage):
         vectordb_mgr_inst = vectordb_mgr.VectorDBManager(ap)
         await vectordb_mgr_inst.initialize()
         ap.vector_db_mgr = vectordb_mgr_inst
+
+        system_update_service_inst = system_update_service.SystemUpdateService(ap)
+        ap.system_update_service = system_update_service_inst
 
         http_ctrl = http_controller.HTTPController(ap)
         await http_ctrl.initialize()

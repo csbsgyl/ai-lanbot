@@ -241,3 +241,35 @@
 - Test defaults: `/opt/ai-lanbot-test`, HTTP `5301`, plugin debug `5402`, reverse ports `3280-3285`, Compose project `ai-lanbot-test`.
 - Production defaults remain `/opt/ai-lanbot`, HTTP `5300`, plugin debug `5401`, reverse ports `2280-2285`, Compose project `docker`.
 - Rollback before commit: restore the modified tracked files and remove `tests/smoke/test_one_click_deploy.py`; after commit, use `git revert <commit>`.
+
+## 2026-07-12 - Task: Replace deployment modes with managed production updates
+### What was done
+- Removed the test deployment mode; the one-click command now deploys only the production instance with no required argument.
+- Added an authenticated update control beside the application version in the community-edition sidebar.
+- Added a host-side systemd path/service updater so the LangBot container can request an update without receiving the host Docker socket.
+- Pinned source archives, updater scripts, and runtime images to the same 40-character Git commit SHA.
+- Published immutable commit-SHA image tags from the development and release image workflows.
+- Preserved the existing HTTP port, Compose project, container names, reverse ports, Box setting, application data, and IDC gateway configuration across managed updates.
+
+### Security and operations
+- The update API accepts only a logged-in user token; API keys and MCP tools cannot trigger host updates.
+- Web requests cannot provide a command, repository, branch, image, or revision to the host updater.
+- The container sees update status read-only and writes only the separate fixed request signal; systemd executes a root-owned updater copy under `/usr/local/libexec`.
+- Managed updates require the immutable SHA-tagged image and do not fall back to executing a local source build.
+- Update state and logs are persisted under `docker/data/update/`; the dashboard reconnects after the service restart.
+
+### Testing
+- Ran 13 focused system-update service and real Quart route tests successfully, including user-token-only authentication and unwritable signal handling.
+- Ran all 7 one-click deployment smoke tests through GNU Bash successfully.
+- Ran the focused IDC query and QQ Official converter suite: 35 tests passed.
+- Ran the complete frontend Playwright suite in Chromium: 37 tests passed, including desktop and 390x844 mobile update flows.
+- Ran TypeScript checking, the Vite production build, and i18n key consistency across all 8 locale files successfully.
+- Ran ShellCheck and Bash syntax checks on both deployment scripts successfully.
+- Ran Ruff check across `src/langbot` and `tests`; all 405 checked Python files were formatted.
+- Parsed the Docker Compose and image workflow YAML files and ran `git diff --check` successfully.
+- Full local backend collection still requires the repository's complete optional dependency set; GitHub CI performs that run after push. Docker runtime verification is delegated to the repository's Build Dev Image and Test Dev Image workflows because Docker is not installed on this workstation.
+
+### Notes
+- The normal deployment command ends with `bash "$tmp"` and defaults to `/opt/ai-lanbot` on HTTP port `5300`.
+- Automatic in-app updates require a Linux host using systemd; the one-click deployment still works when systemd is unavailable, but the update control reports that automatic updates are disabled.
+- This entry supersedes the test/production deployment design documented immediately above.

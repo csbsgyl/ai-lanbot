@@ -4,6 +4,7 @@ import quart
 import sqlalchemy
 
 from .. import group
+from ...service import system_update
 from .....utils import constants
 from .....entity.persistence.metadata import Metadata
 
@@ -66,6 +67,20 @@ class SystemRouterGroup(group.RouterGroup):
                     'wizard_progress': wizard_progress,
                 }
             )
+
+        @self.route('/update', methods=['GET', 'POST'], auth_type=group.AuthType.USER_TOKEN)
+        async def _() -> str:
+            if quart.request.method == 'GET':
+                force_refresh = quart.request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
+                return self.success(data=await self.ap.system_update_service.get_status(force_refresh=force_refresh))
+            try:
+                return self.success(data=await self.ap.system_update_service.request_update())
+            except system_update.UpdateDisabledError as exc:
+                return self.http_status(409, 409, str(exc))
+            except system_update.UpdateInProgressError as exc:
+                return self.http_status(409, 409, str(exc))
+            except system_update.UpdateCheckError as exc:
+                return self.http_status(503, 503, str(exc))
 
         @self.route('/wizard/completed', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
         async def _() -> str:

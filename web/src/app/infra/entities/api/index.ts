@@ -359,6 +359,24 @@ export interface ApiRespSystemInfo {
   wizard_progress: WizardProgress | null;
 }
 
+export type SystemUpdateState =
+  'idle' | 'queued' | 'checking' | 'deploying' | 'success' | 'failed';
+
+export interface ApiRespSystemUpdate {
+  enabled: boolean;
+  repository: string;
+  branch: string;
+  current_revision: string;
+  latest_revision: string;
+  update_available: boolean;
+  can_update: boolean;
+  state: SystemUpdateState;
+  message: string;
+  target_revision: string;
+  updated_at: string;
+  check_error: string;
+}
+
 export interface RagMigrationStatusResp {
   needed: boolean;
   internal_kb_count: number;

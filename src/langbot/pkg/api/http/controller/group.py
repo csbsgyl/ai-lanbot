@@ -5,9 +5,11 @@ import typing
 import enum
 import quart
 import traceback
+from typing import TYPE_CHECKING
 from quart.typing import RouteCallable
 
-from ....core import app
+if TYPE_CHECKING:
+    from ....core import app
 
 # Maximum file upload size limit (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB

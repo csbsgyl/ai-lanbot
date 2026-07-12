@@ -1,0 +1,11 @@
+[Unit]
+Description=ai-lanbot managed application update
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+UMask=0077
+NoNewPrivileges=true
+TimeoutStartSec=0
+ExecStart=/usr/bin/env bash /usr/local/libexec/ai-lanbot-host-update @INSTALL_DIR@

@@ -420,6 +420,40 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     });
   }
 
+  if (path === '/api/v1/system/update' && method === 'GET') {
+    return fulfillJson(route, {
+      enabled: true,
+      repository: 'csbsgyl/ai-lanbot',
+      branch: 'main',
+      current_revision: '1111111111111111111111111111111111111111',
+      latest_revision: '2222222222222222222222222222222222222222',
+      update_available: true,
+      can_update: true,
+      state: 'idle',
+      message: '',
+      target_revision: '',
+      updated_at: '',
+      check_error: '',
+    });
+  }
+
+  if (path === '/api/v1/system/update' && method === 'POST') {
+    return fulfillJson(route, {
+      enabled: true,
+      repository: 'csbsgyl/ai-lanbot',
+      branch: 'main',
+      current_revision: '1111111111111111111111111111111111111111',
+      latest_revision: '2222222222222222222222222222222222222222',
+      update_available: true,
+      can_update: false,
+      state: 'queued',
+      message: 'update_queued',
+      target_revision: '2222222222222222222222222222222222222222',
+      updated_at: '2026-07-12T00:00:00Z',
+      check_error: '',
+    });
+  }
+
   if (path === '/api/v1/user/account-info') {
     return fulfillJson(route, {
       initialized: true,

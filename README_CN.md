@@ -12,18 +12,11 @@
 Linux 正式环境一键部署：
 
 ```bash
-tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp" production
+tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp"
 ```
 
-Linux 测试环境一键部署：
-
-```bash
-tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp" || curl -fsSL https://github.xiaohangyun.org/https://raw.githubusercontent.com/csbsgyl/ai-lanbot/main/scripts/one-click-deploy.sh -o "$tmp") && bash "$tmp" test
-```
-
-`test` 默认安装到 `/opt/ai-lanbot-test`、使用端口 `5301` 并构建最新源码；
-`production` 默认安装到 `/opt/ai-lanbot`、使用端口 `5300` 并优先拉取预构建镜像。
-两套环境使用独立容器名、端口、配置和数据目录，可以在同一台服务器并存。
+脚本只部署正式环境，默认安装到 `/opt/ai-lanbot` 并使用端口 `5300`。
+首次部署完成后，管理员可以点击程序侧栏版本旁的更新按钮，直接检查并安装后续更新。
 
 部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本会自动安装 IDC 查询插件，并且只有在插件运行时和 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
 

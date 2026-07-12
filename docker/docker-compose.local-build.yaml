@@ -8,6 +8,7 @@ services:
       dockerfile: Dockerfile
       args:
         DOCKER_IMAGE_PREFIX: ${LANBOT_DOCKER_IMAGE_PREFIX:-}
+        LANBOT_BUILD_REVISION: ${LANBOT_BUILD_REVISION:-unknown}
     image: csbsgyl/ai-lanbot:local
 
   langbot_box:
@@ -16,6 +17,7 @@ services:
       dockerfile: Dockerfile
       args:
         DOCKER_IMAGE_PREFIX: ${LANBOT_DOCKER_IMAGE_PREFIX:-}
+        LANBOT_BUILD_REVISION: ${LANBOT_BUILD_REVISION:-unknown}
     image: csbsgyl/ai-lanbot:local
 
   langbot:
@@ -24,6 +26,7 @@ services:
       dockerfile: Dockerfile
       args:
         DOCKER_IMAGE_PREFIX: ${LANBOT_DOCKER_IMAGE_PREFIX:-}
+        LANBOT_BUILD_REVISION: ${LANBOT_BUILD_REVISION:-unknown}
     image: csbsgyl/ai-lanbot:local
     ports:
       - "${LANGBOT_HTTP_PORT:-5300}:5300"

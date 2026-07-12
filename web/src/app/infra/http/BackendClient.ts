@@ -18,6 +18,7 @@ import {
   ApiRespExtensions,
   AsyncTaskCreatedResp,
   ApiRespSystemInfo,
+  ApiRespSystemUpdate,
   ApiRespAsyncTasks,
   ApiRespUserToken,
   GetPipelineResponseData,
@@ -998,6 +999,16 @@ export class BackendClient extends BaseHttpClient {
   // ============ System API ============
   public getSystemInfo(): Promise<ApiRespSystemInfo> {
     return this.get('/api/v1/system/info');
+  }
+
+  public getSystemUpdateStatus(
+    refresh: boolean = false,
+  ): Promise<ApiRespSystemUpdate> {
+    return this.get('/api/v1/system/update', refresh ? { refresh: true } : {});
+  }
+
+  public requestSystemUpdate(): Promise<ApiRespSystemUpdate> {
+    return this.post('/api/v1/system/update');
   }
 
   public updateWizardStatus(status: 'skipped' | 'completed'): Promise<void> {
