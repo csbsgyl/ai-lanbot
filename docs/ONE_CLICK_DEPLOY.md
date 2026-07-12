@@ -76,6 +76,8 @@ IDC_QUERY_API_BASE_URL=https://query.example.com
 IDC_QUERY_API_TOKEN=replace-with-a-service-token
 IDC_QUERY_TIMEOUT_SECONDS=8
 IDC_QUERY_VERIFY_TLS=true
+IDC_QUERY_REQUESTS_PER_MINUTE=20
+IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES=5
 ```
 
 These are advanced overrides. The production command works without setting them.
@@ -91,7 +93,9 @@ state it can display its command menu, but binding and data queries return a
 configuration notice instead of fabricated results. After signing in as an
 administrator, open **Settings > IDC Query** to configure the gateway URL,
 service token, request timeout, and TLS verification. Saved changes are loaded
-by the plugin on the next query without restarting the containers.
+by the plugin on the next query without restarting the containers. The same
+page configures per-member query and binding-attempt limits and shows the most
+recent IDC operation outcomes.
 
 The WebUI stores these values in `docker/data/idc-query/config.env` with
 owner-only permissions and preserves them on later one-click upgrades. The GET
@@ -100,6 +104,14 @@ credential endpoint accepts administrator login tokens only, not API keys or
 MCP authentication. The Plugin Runtime reads the mounted file directly because
 plugin processes start with a clean environment. The token is not exposed
 through Docker container environment metadata and must not be committed.
+
+The plugin appends a bounded audit schema to
+`docker/data/idc-query/audit.jsonl`, rotates it at 5 MiB, and keeps three
+backups. Audit records contain operation categories, outcomes, QQ identifiers,
+member identifiers, request IDs, and duration only. Message text, verification
+codes, IP arguments, gateway tokens, and query response data are never logged.
+Audit files use owner-only permissions. The audit endpoint has the same
+user-login-only authentication boundary as credential configuration.
 
 The `IDC_QUERY_*` deployment variables above remain available for unattended
 first-time provisioning. Later changes can be made from the WebUI.

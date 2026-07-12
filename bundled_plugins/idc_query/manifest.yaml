@@ -4,7 +4,7 @@ metadata:
   author: csbsgyl
   name: idc-query
   repository: https://github.com/csbsgyl/ai-lanbot
-  version: 0.1.0
+  version: 0.2.0
   description:
     en_US: Deterministic IDC self-service queries for QQ Official bots.
     zh_Hans: 面向 QQ 官方机器人的 IDC 自助查询插件。
@@ -37,6 +37,24 @@ spec:
         zh_Hant: 網關逾時秒數
       required: true
       default: 8
+    - name: requests_per_minute
+      id: requests_per_minute
+      type: integer
+      label:
+        en_US: Queries per member per minute
+        zh_Hans: 每位成员每分钟查询上限
+        zh_Hant: 每位成員每分鐘查詢上限
+      required: true
+      default: 20
+    - name: bind_attempts_per_10_minutes
+      id: bind_attempts_per_10_minutes
+      type: integer
+      label:
+        en_US: Binding attempts per member per 10 minutes
+        zh_Hans: 每位成员每 10 分钟绑定尝试上限
+        zh_Hant: 每位成員每 10 分鐘綁定嘗試上限
+      required: true
+      default: 5
     - name: exclusive_mode
       id: exclusive_mode
       type: boolean

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
+import json
 import math
 import os
 import tempfile
@@ -19,6 +21,15 @@ MIN_TIMEOUT_SECONDS = 1.0
 MAX_TIMEOUT_SECONDS = 120.0
 MAX_BASE_URL_LENGTH = 2048
 MAX_TOKEN_LENGTH = 8192
+DEFAULT_REQUESTS_PER_MINUTE = 20
+DEFAULT_BIND_ATTEMPTS_PER_10_MINUTES = 5
+MIN_RATE_LIMIT = 1
+MAX_RATE_LIMIT = 1000
+DEFAULT_AUDIT_LIMIT = 100
+MAX_AUDIT_LIMIT = 200
+AUDIT_BACKUP_COUNT = 3
+AUDIT_COMMANDS = {'bind', 'unbind', 'ip', 'protection', 'block', 'traffic', 'businesses', 'tickets', 'balance'}
+AUDIT_OUTCOMES = {'success', 'denied', 'rate_limited', 'gateway_error', 'internal_error'}
 
 
 class IDCQueryConfigValidationError(ValueError):
@@ -46,6 +57,8 @@ class IDCQueryConfigService:
             'clear_token',
             'timeout_seconds',
             'verify_tls',
+            'requests_per_minute',
+            'bind_attempts_per_10_minutes',
         }
         unknown_fields = set(payload) - allowed_fields
         if unknown_fields:
@@ -57,6 +70,8 @@ class IDCQueryConfigService:
             token = current['token']
             timeout_seconds = current['timeout_seconds']
             verify_tls = current['verify_tls']
+            requests_per_minute = current['requests_per_minute']
+            bind_attempts_per_10_minutes = current['bind_attempts_per_10_minutes']
 
             if 'base_url' in payload:
                 base_url = self._validate_base_url(payload['base_url'])
@@ -64,6 +79,16 @@ class IDCQueryConfigService:
                 timeout_seconds = self._validate_timeout(payload['timeout_seconds'])
             if 'verify_tls' in payload:
                 verify_tls = self._validate_boolean(payload['verify_tls'], 'verify_tls')
+            if 'requests_per_minute' in payload:
+                requests_per_minute = self._validate_rate_limit(
+                    payload['requests_per_minute'],
+                    'requests_per_minute',
+                )
+            if 'bind_attempts_per_10_minutes' in payload:
+                bind_attempts_per_10_minutes = self._validate_rate_limit(
+                    payload['bind_attempts_per_10_minutes'],
+                    'bind_attempts_per_10_minutes',
+                )
 
             clear_token = payload.get('clear_token', False)
             clear_token = self._validate_boolean(clear_token, 'clear_token')
@@ -82,6 +107,8 @@ class IDCQueryConfigService:
                 'token': token,
                 'timeout_seconds': timeout_seconds,
                 'verify_tls': verify_tls,
+                'requests_per_minute': requests_per_minute,
+                'bind_attempts_per_10_minutes': bind_attempts_per_10_minutes,
             }
             self._write_config(config)
             return self._public_config(config)
@@ -105,6 +132,14 @@ class IDCQueryConfigService:
             'token': values.get('IDC_QUERY_API_TOKEN', ''),
             'timeout_seconds': self._parse_timeout(values.get('IDC_QUERY_TIMEOUT_SECONDS')),
             'verify_tls': self._parse_boolean(values.get('IDC_QUERY_VERIFY_TLS'), default=True),
+            'requests_per_minute': self._parse_rate_limit(
+                values.get('IDC_QUERY_REQUESTS_PER_MINUTE'),
+                DEFAULT_REQUESTS_PER_MINUTE,
+            ),
+            'bind_attempts_per_10_minutes': self._parse_rate_limit(
+                values.get('IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES'),
+                DEFAULT_BIND_ATTEMPTS_PER_10_MINUTES,
+            ),
         }
 
     def _write_config(self, config: dict[str, Any]) -> None:
@@ -119,6 +154,8 @@ class IDCQueryConfigService:
             f'IDC_QUERY_API_TOKEN={config["token"]}\n'
             f'IDC_QUERY_TIMEOUT_SECONDS={config["timeout_seconds"]:g}\n'
             f'IDC_QUERY_VERIFY_TLS={str(config["verify_tls"]).lower()}\n'
+            f'IDC_QUERY_REQUESTS_PER_MINUTE={config["requests_per_minute"]}\n'
+            f'IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES={config["bind_attempts_per_10_minutes"]}\n'
         )
 
         temp_path: Path | None = None
@@ -156,7 +193,84 @@ class IDCQueryConfigService:
             'verify_tls': config['verify_tls'],
             'token_configured': bool(config['token']),
             'configured': bool(base_url),
+            'requests_per_minute': config['requests_per_minute'],
+            'bind_attempts_per_10_minutes': config['bind_attempts_per_10_minutes'],
         }
+
+    async def get_audit_events(self, limit: int = DEFAULT_AUDIT_LIMIT) -> dict[str, Any]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_AUDIT_LIMIT:
+            raise IDCQueryConfigValidationError(f'Audit limit must be between 1 and {MAX_AUDIT_LIMIT}.')
+
+        events = await asyncio.to_thread(self._read_latest_audit_events, limit)
+        return {
+            'events': events,
+            'count': len(events),
+            'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+
+    @classmethod
+    def _read_latest_audit_events(cls, limit: int) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        audit_path = Path(paths.get_data_path('idc-query', 'audit.jsonl'))
+        audit_paths = [audit_path] + [
+            audit_path.with_name(f'{audit_path.name}.{index}') for index in range(1, AUDIT_BACKUP_COUNT + 1)
+        ]
+        for candidate in audit_paths:
+            events.extend(cls._read_audit_file(candidate, limit - len(events)))
+            if len(events) >= limit:
+                break
+        return events[:limit]
+
+    @classmethod
+    def _read_audit_file(cls, path: Path, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+        try:
+            lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+        except FileNotFoundError:
+            return []
+
+        events = []
+        for line in reversed(lines):
+            try:
+                payload = json.loads(line)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            event = cls._normalize_audit_event(payload)
+            if event is not None:
+                events.append(event)
+            if len(events) >= limit:
+                break
+        return events
+
+    @classmethod
+    def _normalize_audit_event(cls, payload: Any) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+        command = cls._limited_text(payload.get('command'), 40)
+        outcome = cls._limited_text(payload.get('outcome'), 40)
+        if command not in AUDIT_COMMANDS or outcome not in AUDIT_OUTCOMES:
+            return None
+        duration = payload.get('duration_ms', 0)
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+            duration = 0
+        return {
+            'timestamp': cls._limited_text(payload.get('timestamp'), 64),
+            'command': command,
+            'outcome': outcome,
+            'reason': cls._limited_text(payload.get('reason'), 80),
+            'group_id': cls._limited_text(payload.get('group_id'), 160),
+            'user_id': cls._limited_text(payload.get('user_id'), 160),
+            'member_id': cls._limited_text(payload.get('member_id'), 160),
+            'request_id': cls._limited_text(payload.get('request_id'), 160),
+            'duration_ms': max(0, min(round(duration), 3_600_000)),
+        }
+
+    @staticmethod
+    def _limited_text(value: Any, limit: int) -> str:
+        if not isinstance(value, str):
+            return ''
+        return ''.join(character for character in value if ord(character) >= 32 and ord(character) != 127)[:limit]
 
     @staticmethod
     def _validate_base_url(value: Any) -> str:
@@ -218,6 +332,14 @@ class IDCQueryConfigService:
         return value
 
     @staticmethod
+    def _validate_rate_limit(value: Any, field_name: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise IDCQueryConfigValidationError(f'{field_name} must be an integer.')
+        if not MIN_RATE_LIMIT <= value <= MAX_RATE_LIMIT:
+            raise IDCQueryConfigValidationError(f'{field_name} must be between {MIN_RATE_LIMIT} and {MAX_RATE_LIMIT}.')
+        return value
+
+    @staticmethod
     def _parse_timeout(value: str | None) -> float:
         try:
             timeout_seconds = float(value) if value is not None else DEFAULT_TIMEOUT_SECONDS
@@ -237,3 +359,11 @@ class IDCQueryConfigService:
         if normalized in {'0', 'false', 'no', 'off'}:
             return False
         return default
+
+    @staticmethod
+    def _parse_rate_limit(value: str | None, default: int) -> int:
+        try:
+            parsed = int(value) if value is not None else default
+        except (TypeError, ValueError):
+            return default
+        return parsed if MIN_RATE_LIMIT <= parsed <= MAX_RATE_LIMIT else default

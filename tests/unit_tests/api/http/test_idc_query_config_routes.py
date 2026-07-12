@@ -24,6 +24,8 @@ async def idc_config_route_client():
             'verify_tls': True,
             'token_configured': True,
             'configured': True,
+            'requests_per_minute': 20,
+            'bind_attempts_per_10_minutes': 5,
         }
     )
     app.idc_query_config_service.update_config = AsyncMock(
@@ -33,6 +35,27 @@ async def idc_config_route_client():
             'verify_tls': True,
             'token_configured': True,
             'configured': True,
+            'requests_per_minute': 30,
+            'bind_attempts_per_10_minutes': 4,
+        }
+    )
+    app.idc_query_config_service.get_audit_events = AsyncMock(
+        return_value={
+            'events': [
+                {
+                    'timestamp': '2026-07-12T10:00:00+00:00',
+                    'command': 'ip',
+                    'outcome': 'success',
+                    'reason': 'queried',
+                    'group_id': 'group-1',
+                    'user_id': 'user-1',
+                    'member_id': 'member-1',
+                    'request_id': 'request-1',
+                    'duration_ms': 12,
+                }
+            ],
+            'count': 1,
+            'generated_at': '2026-07-12T10:00:01+00:00',
         }
     )
 
@@ -48,9 +71,11 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
 
     get_response = await client.get('/api/v1/system/idc-query')
     put_response = await client.put('/api/v1/system/idc-query', json={})
+    audit_response = await client.get('/api/v1/system/idc-query/audit')
 
     assert get_response.status_code == 401
     assert put_response.status_code == 401
+    assert audit_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -66,6 +91,13 @@ async def test_idc_config_routes_reject_api_key_authentication(idc_config_route_
     assert response.status_code == 401
     app.idc_query_config_service.update_config.assert_not_awaited()
 
+    audit_response = await client.get(
+        '/api/v1/system/idc-query/audit',
+        headers={'X-API-Key': 'automation-key'},
+    )
+    assert audit_response.status_code == 401
+    app.idc_query_config_service.get_audit_events.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 async def test_idc_config_routes_read_and_update_settings(idc_config_route_client):
@@ -76,6 +108,8 @@ async def test_idc_config_routes_read_and_update_settings(idc_config_route_clien
         'token': 'replacement-token',
         'timeout_seconds': 10,
         'verify_tls': True,
+        'requests_per_minute': 30,
+        'bind_attempts_per_10_minutes': 4,
     }
 
     get_response = await client.get('/api/v1/system/idc-query', headers=headers)
@@ -118,4 +152,46 @@ async def test_idc_config_route_does_not_expose_filesystem_errors(idc_config_rou
 
     assert response.status_code == 500
     assert (await response.get_json())['msg'] == 'Failed to save IDC query configuration.'
+    assert '/private/path' not in (await response.get_data(as_text=True))
+
+
+@pytest.mark.asyncio
+async def test_idc_audit_route_returns_recent_events(idc_config_route_client):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/idc-query/audit?limit=25',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 200
+    assert (await response.get_json())['data']['events'][0]['command'] == 'ip'
+    app.idc_query_config_service.get_audit_events.assert_awaited_once_with(25)
+
+
+@pytest.mark.asyncio
+async def test_idc_audit_route_rejects_invalid_limit(idc_config_route_client):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/idc-query/audit?limit=invalid',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 400
+    app.idc_query_config_service.get_audit_events.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_idc_audit_route_does_not_expose_filesystem_errors(idc_config_route_client):
+    client, app = idc_config_route_client
+    app.idc_query_config_service.get_audit_events.side_effect = OSError('/private/path/audit.jsonl denied')
+
+    response = await client.get(
+        '/api/v1/system/idc-query/audit',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 500
+    assert (await response.get_json())['msg'] == 'Failed to read IDC query audit log.'
     assert '/private/path' not in (await response.get_data(as_text=True))

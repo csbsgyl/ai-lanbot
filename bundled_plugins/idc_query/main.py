@@ -6,6 +6,7 @@ from pathlib import Path
 
 from langbot_plugin.api.definition.plugin import BasePlugin
 
+from idc_query_core.audit import JsonlAuditLog
 from idc_query_core.gateway import IDCQueryGateway
 from idc_query_core.service import HandleResult, IDCQueryService
 from idc_query_core.state import JsonBindingStore
@@ -46,6 +47,14 @@ def _config_signature(path: Path) -> tuple[int, int, int] | None:
     return (file_stat.st_ino, file_stat.st_mtime_ns, file_stat.st_size)
 
 
+def _as_positive_int(value: object, default: int, maximum: int = 1000) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if 1 <= parsed <= maximum else default
+
+
 class IDCQueryPlugin(BasePlugin):
     async def initialize(self) -> None:
         self._plugin_config = self.get_config() or {}
@@ -64,7 +73,14 @@ class IDCQueryPlugin(BasePlugin):
                 str(default_state_path),
             )
         )
-        gateway, self._runtime_config_signature = self._load_gateway()
+        default_audit_path = state_path.parent / 'audit.jsonl'
+        audit_path = Path(os.getenv('IDC_QUERY_AUDIT_PATH', str(default_audit_path)))
+        (
+            gateway,
+            requests_per_minute,
+            bind_attempts_per_10_minutes,
+            self._runtime_config_signature,
+        ) = self._load_runtime_settings()
 
         config = self._plugin_config
         self.idc_query_service = IDCQueryService(
@@ -72,11 +88,14 @@ class IDCQueryPlugin(BasePlugin):
             gateway=gateway,
             exclusive_mode=_as_bool(config.get('exclusive_mode'), True),
             sensitive_binder_only=_as_bool(config.get('sensitive_binder_only'), True),
+            audit_log=JsonlAuditLog(audit_path),
+            requests_per_minute=requests_per_minute,
+            bind_attempts_per_10_minutes=bind_attempts_per_10_minutes,
         )
         self.allow_simulated_events = _as_bool(config.get('allow_simulated_events'), False)
         await self.idc_query_service.initialize()
 
-    def _load_gateway(self) -> tuple[IDCQueryGateway, tuple[int, int, int] | None]:
+    def _load_runtime_settings(self) -> tuple[IDCQueryGateway, int, int, tuple[int, int, int] | None]:
         runtime_config: dict[str, str] = {}
         signature = _config_signature(self._runtime_config_path)
         for _ in range(2):
@@ -102,6 +121,18 @@ class IDCQueryPlugin(BasePlugin):
             os.getenv('IDC_QUERY_VERIFY_TLS') or runtime_config.get('IDC_QUERY_VERIFY_TLS') or config.get('verify_tls'),
             True,
         )
+        requests_per_minute = _as_positive_int(
+            os.getenv('IDC_QUERY_REQUESTS_PER_MINUTE')
+            or runtime_config.get('IDC_QUERY_REQUESTS_PER_MINUTE')
+            or config.get('requests_per_minute'),
+            20,
+        )
+        bind_attempts_per_10_minutes = _as_positive_int(
+            os.getenv('IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES')
+            or runtime_config.get('IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES')
+            or config.get('bind_attempts_per_10_minutes'),
+            5,
+        )
 
         return (
             IDCQueryGateway(
@@ -110,6 +141,8 @@ class IDCQueryPlugin(BasePlugin):
                 timeout_seconds=timeout_seconds,
                 verify_tls=verify_tls,
             ),
+            requests_per_minute,
+            bind_attempts_per_10_minutes,
             signature,
         )
 
@@ -123,10 +156,16 @@ class IDCQueryPlugin(BasePlugin):
             if signature == self._runtime_config_signature:
                 return
             try:
-                gateway, loaded_signature = self._load_gateway()
+                gateway, requests_per_minute, bind_attempts_per_10_minutes, loaded_signature = (
+                    self._load_runtime_settings()
+                )
             except (OSError, TypeError, UnicodeError, ValueError):
                 return
             self.idc_query_service.gateway = gateway
+            self.idc_query_service.configure_rate_limits(
+                requests_per_minute=requests_per_minute,
+                bind_attempts_per_10_minutes=bind_attempts_per_10_minutes,
+            )
             self._runtime_config_signature = loaded_signature
 
     async def handle_idc_query(

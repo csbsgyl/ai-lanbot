@@ -221,6 +221,10 @@ write_idc_query_config() {
   [ -f "$config_file" ] || : > "$config_file"
   set_env_key_if_missing "$config_file" "IDC_QUERY_API_BASE_URL" ""
   set_env_key_if_missing "$config_file" "IDC_QUERY_API_TOKEN" ""
+  set_env_key_if_missing "$config_file" "IDC_QUERY_TIMEOUT_SECONDS" "8"
+  set_env_key_if_missing "$config_file" "IDC_QUERY_VERIFY_TLS" "true"
+  set_env_key_if_missing "$config_file" "IDC_QUERY_REQUESTS_PER_MINUTE" "20"
+  set_env_key_if_missing "$config_file" "IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES" "5"
   [ -n "${IDC_QUERY_API_BASE_URL:-}" ] \
     && set_env_key "$config_file" "IDC_QUERY_API_BASE_URL" "$IDC_QUERY_API_BASE_URL"
   [ -n "${IDC_QUERY_API_TOKEN:-}" ] \
@@ -229,6 +233,10 @@ write_idc_query_config() {
     && set_env_key "$config_file" "IDC_QUERY_TIMEOUT_SECONDS" "$IDC_QUERY_TIMEOUT_SECONDS"
   [ -n "${IDC_QUERY_VERIFY_TLS:-}" ] \
     && set_env_key "$config_file" "IDC_QUERY_VERIFY_TLS" "$IDC_QUERY_VERIFY_TLS"
+  [ -n "${IDC_QUERY_REQUESTS_PER_MINUTE:-}" ] \
+    && set_env_key "$config_file" "IDC_QUERY_REQUESTS_PER_MINUTE" "$IDC_QUERY_REQUESTS_PER_MINUTE"
+  [ -n "${IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES:-}" ] \
+    && set_env_key "$config_file" "IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES" "$IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES"
   chmod 600 "$config_file"
 }
 

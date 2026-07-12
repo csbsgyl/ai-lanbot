@@ -161,6 +161,10 @@ test.describe('authenticated app shell', () => {
       .getByLabel('Gateway URL')
       .fill('https://query.example.com/api/');
     await dialog.getByLabel('Request timeout').fill('15');
+    await dialog.getByLabel('Queries per member / minute').fill('25');
+    await dialog
+      .getByLabel('Binding attempts per member / 10 minutes')
+      .fill('3');
     await dialog.getByLabel('Service token').fill('playwright-secret-token');
     await dialog.getByRole('button', { name: 'Save' }).click();
 
@@ -171,6 +175,22 @@ test.describe('authenticated app shell', () => {
     );
     await expect(dialog.getByLabel('Service token')).toHaveValue('');
     await expect(dialog.getByText('Configured').last()).toBeVisible();
+    await expect(dialog.getByLabel('Queries per member / minute')).toHaveValue(
+      '25',
+    );
+
+    await dialog.getByRole('tab', { name: 'Recent activity' }).click();
+    await expect(dialog.getByText('IP query')).toBeVisible();
+    await expect(dialog.getByText('Success')).toBeVisible();
+    await expect(dialog.getByText('Balance')).toBeVisible();
+    await expect(dialog.getByText('Denied')).toBeVisible();
+    await expect(dialog).toContainText('qq-***90');
+    await expect(dialog).toContainText('1***6');
+    await expect(dialog).not.toContainText('qq-group-openid-1234567890');
+    await expect(dialog).not.toContainText('qq-member-openid-1234567890');
+    await expect(dialog).not.toContainText('10086');
+
+    await dialog.getByRole('tab', { name: 'Configuration' }).click();
 
     await dialog.getByRole('button', { name: 'Clear token' }).click();
     await expect(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 
@@ -28,6 +29,8 @@ async def test_empty_config_uses_secure_defaults(config_service: IDCQueryConfigS
         'verify_tls': True,
         'token_configured': False,
         'configured': False,
+        'requests_per_minute': 20,
+        'bind_attempts_per_10_minutes': 5,
     }
 
 
@@ -39,6 +42,8 @@ async def test_update_writes_config_without_returning_token(config_service: IDCQ
             'token': 'service-token==',
             'timeout_seconds': 12,
             'verify_tls': False,
+            'requests_per_minute': 30,
+            'bind_attempts_per_10_minutes': 4,
         }
     )
 
@@ -48,6 +53,8 @@ async def test_update_writes_config_without_returning_token(config_service: IDCQ
         'verify_tls': False,
         'token_configured': True,
         'configured': True,
+        'requests_per_minute': 30,
+        'bind_attempts_per_10_minutes': 4,
     }
     assert 'token' not in config
     assert config_service.config_path.read_text(encoding='utf-8') == (
@@ -55,6 +62,8 @@ async def test_update_writes_config_without_returning_token(config_service: IDCQ
         'IDC_QUERY_API_TOKEN=service-token==\n'
         'IDC_QUERY_TIMEOUT_SECONDS=12\n'
         'IDC_QUERY_VERIFY_TLS=false\n'
+        'IDC_QUERY_REQUESTS_PER_MINUTE=30\n'
+        'IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES=4\n'
     )
     if os.name != 'nt':
         assert stat.S_IMODE(config_service.config_path.stat().st_mode) == 0o600
@@ -85,6 +94,9 @@ async def test_blank_token_preserves_existing_token_and_explicit_clear_removes_i
         ({'timeout_seconds': 0}, 'between 1 and 120'),
         ({'timeout_seconds': True}, 'must be a number'),
         ({'verify_tls': 'true'}, 'must be a boolean'),
+        ({'requests_per_minute': 0}, 'between 1 and 1000'),
+        ({'requests_per_minute': True}, 'must be an integer'),
+        ({'bind_attempts_per_10_minutes': 1001}, 'between 1 and 1000'),
         ({'token': 'invalid\ttoken'}, 'token is invalid'),
         ({'unknown': 'value'}, 'unsupported fields'),
         ({'token': 'replacement', 'clear_token': True}, 'replaced and cleared'),
@@ -108,3 +120,75 @@ async def test_invalid_updates_are_rejected_without_changing_file(
 async def test_non_object_request_is_rejected(config_service: IDCQueryConfigService):
     with pytest.raises(IDCQueryConfigValidationError, match='JSON object'):
         await config_service.update_config(None)
+
+
+@pytest.mark.asyncio
+async def test_audit_reader_returns_latest_valid_events_across_rotated_files(config_service: IDCQueryConfigService):
+    audit_path = config_service.config_path.parent / 'audit.jsonl'
+    audit_path.parent.mkdir(parents=True)
+    current_events = [
+        {
+            'timestamp': '2026-07-12T10:02:00+00:00',
+            'command': 'ip',
+            'outcome': 'success',
+            'reason': 'queried',
+            'group_id': 'group-1',
+            'user_id': 'user-1',
+            'member_id': 'member-1',
+            'request_id': 'request-2',
+            'duration_ms': 12,
+        },
+        {
+            'timestamp': '2026-07-12T10:03:00+00:00',
+            'command': 'balance',
+            'outcome': 'denied',
+            'reason': 'binder_required',
+            'group_id': 'group-1\nignored',
+            'user_id': 'user-2',
+            'member_id': 'member-1',
+            'request_id': 'request-3',
+            'duration_ms': 4,
+        },
+    ]
+    audit_path.write_text(
+        '\n'.join(json.dumps(event) for event in current_events) + '\n{broken}\n',
+        encoding='utf-8',
+    )
+    audit_path.with_name('audit.jsonl.1').write_text(
+        json.dumps(
+            {
+                'timestamp': '2026-07-12T10:01:00+00:00',
+                'command': 'bind',
+                'outcome': 'success',
+                'reason': 'bound',
+                'group_id': 'group-1',
+                'user_id': 'user-1',
+                'member_id': 'member-1',
+                'request_id': 'request-1',
+                'duration_ms': 30,
+            }
+        )
+        + '\n',
+        encoding='utf-8',
+    )
+
+    result = await config_service.get_audit_events(3)
+
+    assert result['count'] == 3
+    assert [event['request_id'] for event in result['events']] == ['request-3', 'request-2', 'request-1']
+    assert result['events'][0]['group_id'] == 'group-1ignored'
+    assert result['generated_at']
+
+
+@pytest.mark.asyncio
+async def test_audit_reader_rejects_unknown_schema_and_invalid_limit(config_service: IDCQueryConfigService):
+    audit_path = config_service.config_path.parent / 'audit.jsonl'
+    audit_path.parent.mkdir(parents=True)
+    audit_path.write_text(
+        json.dumps({'command': 'custom', 'outcome': 'success', 'token': 'must-not-leak'}) + '\n',
+        encoding='utf-8',
+    )
+
+    assert (await config_service.get_audit_events())['events'] == []
+    with pytest.raises(IDCQueryConfigValidationError, match='between 1 and 200'):
+        await config_service.get_audit_events(201)

@@ -388,6 +388,8 @@ export interface ApiRespIDCQueryConfig {
   verify_tls: boolean;
   token_configured: boolean;
   configured: boolean;
+  requests_per_minute: number;
+  bind_attempts_per_10_minutes: number;
 }
 
 export interface UpdateIDCQueryConfig {
@@ -396,6 +398,26 @@ export interface UpdateIDCQueryConfig {
   clear_token?: boolean;
   timeout_seconds?: number;
   verify_tls?: boolean;
+  requests_per_minute?: number;
+  bind_attempts_per_10_minutes?: number;
+}
+
+export interface IDCQueryAuditEvent {
+  timestamp: string;
+  command: string;
+  outcome: string;
+  reason: string;
+  group_id: string;
+  user_id: string;
+  member_id: string;
+  request_id: string;
+  duration_ms: number;
+}
+
+export interface ApiRespIDCQueryAudit {
+  events: IDCQueryAuditEvent[];
+  count: number;
+  generated_at: string;
 }
 
 export interface RagMigrationStatusResp {

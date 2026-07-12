@@ -35,9 +35,21 @@ service token itself is never returned. Configuration is atomically written to
 `data/idc-query/config.env` with owner-only permissions, and the plugin detects
 file replacement before processing the next query.
 
+The configuration page also controls bot-side per-member limits for normal
+queries and binding attempts. These limits protect the bot and gateway from a
+single noisy QQ member; they are defense in depth and do not replace
+gateway-side distributed limits or one-time verification-code controls.
+
+Recent operation outcomes are read from a rotating owner-only JSONL audit log.
+The log stores only command category, categorical outcome/reason, QQ group and
+user identifiers, bound member identifier, request ID, timestamp, and duration.
+It does not store chat text, verification codes, IP arguments, service tokens,
+gateway error messages, or response payloads.
+
 The one-click script also accepts `IDC_QUERY_API_BASE_URL`,
 `IDC_QUERY_API_TOKEN`, `IDC_QUERY_TIMEOUT_SECONDS`, and
-`IDC_QUERY_VERIFY_TLS` for unattended initial provisioning.
+`IDC_QUERY_VERIFY_TLS`, `IDC_QUERY_REQUESTS_PER_MINUTE`, and
+`IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES` for unattended initial provisioning.
 
 ## Response envelope
 
@@ -147,7 +159,8 @@ Example IP response:
 
 - Use a read-only service identity for all query sources.
 - Enforce tenant/member ownership at the gateway and again at each source when possible.
-- Apply request timeouts, per-member rate limits, and audit logging.
+- Apply gateway-side request timeouts, per-member rate limits, and audit logging;
+  bot-side limits and audit records are an additional layer, not a replacement.
 - Deduplicate mutating requests with `X-Request-ID`.
 - Redact balances, ticket details, personal information, and infrastructure metadata according to role.
 - Return partial data with explicit source status when one upstream system is unavailable.

@@ -76,7 +76,10 @@ interface LangBotApiMockState {
     verify_tls: boolean;
     token_configured: boolean;
     configured: boolean;
+    requests_per_minute: number;
+    bind_attempts_per_10_minutes: number;
   };
+  idcQueryAuditEvents: JsonRecord[];
   knowledgeBases: KnowledgeBaseMock[];
   mcpServers: MCPServerMock[];
   monitoringData: unknown;
@@ -483,9 +486,25 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
         configured: Boolean(
           String(payload.base_url ?? state.idcQueryConfig.base_url).trim(),
         ),
+        requests_per_minute: Number(
+          payload.requests_per_minute ??
+            state.idcQueryConfig.requests_per_minute,
+        ),
+        bind_attempts_per_10_minutes: Number(
+          payload.bind_attempts_per_10_minutes ??
+            state.idcQueryConfig.bind_attempts_per_10_minutes,
+        ),
       };
     }
     return fulfillJson(route, state.idcQueryConfig);
+  }
+
+  if (path === '/api/v1/system/idc-query/audit') {
+    return fulfillJson(route, {
+      events: state.idcQueryAuditEvents,
+      count: state.idcQueryAuditEvents.length,
+      generated_at: '2026-07-12T10:05:00+00:00',
+    });
   }
 
   if (path === '/api/v1/user/account-info') {
@@ -1038,7 +1057,33 @@ export async function installLangBotApiMocks(
       verify_tls: true,
       token_configured: false,
       configured: false,
+      requests_per_minute: 20,
+      bind_attempts_per_10_minutes: 5,
     },
+    idcQueryAuditEvents: [
+      {
+        timestamp: '2026-07-12T10:04:00+00:00',
+        command: 'ip',
+        outcome: 'success',
+        reason: 'queried',
+        group_id: 'qq-group-openid-1234567890',
+        user_id: 'qq-member-openid-1234567890',
+        member_id: '10086',
+        request_id: 'request-2',
+        duration_ms: 36,
+      },
+      {
+        timestamp: '2026-07-12T10:03:00+00:00',
+        command: 'balance',
+        outcome: 'denied',
+        reason: 'binder_required',
+        group_id: 'qq-group-openid-1234567890',
+        user_id: 'qq-member-openid-0987654321',
+        member_id: '10086',
+        request_id: 'request-1',
+        duration_ms: 2,
+      },
+    ],
     knowledgeBases: [],
     mcpServers: [],
     monitoringData: monitoringData || emptyMonitoringData(),

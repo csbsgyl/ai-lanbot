@@ -20,6 +20,7 @@ import {
   ApiRespSystemInfo,
   ApiRespSystemUpdate,
   ApiRespIDCQueryConfig,
+  ApiRespIDCQueryAudit,
   UpdateIDCQueryConfig,
   ApiRespAsyncTasks,
   ApiRespUserToken,
@@ -1021,6 +1022,10 @@ export class BackendClient extends BaseHttpClient {
     config: UpdateIDCQueryConfig,
   ): Promise<ApiRespIDCQueryConfig> {
     return this.put('/api/v1/system/idc-query', config);
+  }
+
+  public getIDCQueryAudit(limit: number = 100): Promise<ApiRespIDCQueryAudit> {
+    return this.get('/api/v1/system/idc-query/audit', { limit });
   }
 
   public updateWizardStatus(status: 'skipped' | 'completed'): Promise<void> {

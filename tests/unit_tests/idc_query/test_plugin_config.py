@@ -35,7 +35,9 @@ async def test_plugin_loads_secure_runtime_config_file(monkeypatch, tmp_path):
         'IDC_QUERY_API_BASE_URL=https://query.example.com\n'
         'IDC_QUERY_API_TOKEN=service-token\n'
         'IDC_QUERY_TIMEOUT_SECONDS=12\n'
-        'IDC_QUERY_VERIFY_TLS=false\n',
+        'IDC_QUERY_VERIFY_TLS=false\n'
+        'IDC_QUERY_REQUESTS_PER_MINUTE=30\n'
+        'IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES=4\n',
         encoding='utf-8',
     )
     monkeypatch.setenv('IDC_QUERY_CONFIG_PATH', str(config_path))
@@ -57,7 +59,10 @@ async def test_plugin_loads_secure_runtime_config_file(monkeypatch, tmp_path):
     assert gateway.token == 'service-token'
     assert gateway.timeout_seconds == 12
     assert gateway.verify_tls is False
+    assert plugin.idc_query_service.requests_per_minute == 30
+    assert plugin.idc_query_service.bind_attempts_per_10_minutes == 4
     assert plugin.idc_query_service.store.path == state_path
+    assert plugin.idc_query_service.audit_log.path == tmp_path / 'audit.jsonl'
 
 
 @pytest.mark.asyncio
@@ -87,7 +92,9 @@ async def test_plugin_hot_reloads_runtime_gateway_config(monkeypatch, tmp_path):
         'IDC_QUERY_API_BASE_URL=https://new-query.example.com/api\n'
         'IDC_QUERY_API_TOKEN=new-token==\n'
         'IDC_QUERY_TIMEOUT_SECONDS=15\n'
-        'IDC_QUERY_VERIFY_TLS=false\n',
+        'IDC_QUERY_VERIFY_TLS=false\n'
+        'IDC_QUERY_REQUESTS_PER_MINUTE=25\n'
+        'IDC_QUERY_BIND_ATTEMPTS_PER_10_MINUTES=3\n',
         encoding='utf-8',
     )
     result = await plugin.handle_idc_query(
@@ -104,6 +111,8 @@ async def test_plugin_hot_reloads_runtime_gateway_config(monkeypatch, tmp_path):
     assert gateway.token == 'new-token=='
     assert gateway.timeout_seconds == 15
     assert gateway.verify_tls is False
+    assert plugin.idc_query_service.requests_per_minute == 25
+    assert plugin.idc_query_service.bind_attempts_per_10_minutes == 3
 
 
 @pytest.mark.asyncio
