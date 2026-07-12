@@ -30,6 +30,7 @@ import {
   Sparkles,
   HardDrive,
   Server,
+  ServerCog,
   Puzzle,
   RefreshCcw,
 } from 'lucide-react';
@@ -1937,6 +1938,19 @@ export default function HomeSidebar({
               >
                 <KeyRound className="size-4 text-blue-500" />
                 <span>{t('common.apiIntegration')}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+
+          {/* IDC Query settings entry */}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => openSettings('idcQuery')}
+                tooltip={t('idcQuery.title')}
+              >
+                <ServerCog className="size-4 text-emerald-600" />
+                <span>{t('idcQuery.title')}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

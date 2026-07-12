@@ -34,6 +34,7 @@ from ..api.http.service import webhook as webhook_service
 from ..api.http.service import monitoring as monitoring_service
 from ..api.http.service import skill as skill_service
 from ..api.http.service import maintenance as maintenance_service
+from ..api.http.service import idc_query_config as idc_query_config_service
 from ..api.http.service import system_update as system_update_service
 from ..discover import engine as discover_engine
 from ..storage import mgr as storagemgr
@@ -165,6 +166,8 @@ class Application:
     skill_mgr: skill_mgr.SkillManager = None
 
     maintenance_service: maintenance_service.MaintenanceService = None
+
+    idc_query_config_service: idc_query_config_service.IDCQueryConfigService = None
 
     system_update_service: system_update_service.SystemUpdateService = None
 

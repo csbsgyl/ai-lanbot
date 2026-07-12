@@ -728,7 +728,7 @@ print_success_info() {
   if grep -Eq '^IDC_QUERY_API_BASE_URL=.+$' "${INSTALL_DIR}/docker/data/idc-query/config.env"; then
     log "IDC query plugin: installed and query gateway configured."
   else
-    log "IDC query plugin: installed; configure docker/data/idc-query/config.env before using queries."
+    log "IDC query plugin: installed; configure it in WebUI Settings > IDC Query before using queries."
   fi
   if [ "$UPDATE_ENABLED" = "true" ]; then
     log "In-app updates: enabled."

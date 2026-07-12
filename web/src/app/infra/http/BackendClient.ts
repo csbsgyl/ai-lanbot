@@ -19,6 +19,8 @@ import {
   AsyncTaskCreatedResp,
   ApiRespSystemInfo,
   ApiRespSystemUpdate,
+  ApiRespIDCQueryConfig,
+  UpdateIDCQueryConfig,
   ApiRespAsyncTasks,
   ApiRespUserToken,
   GetPipelineResponseData,
@@ -1009,6 +1011,16 @@ export class BackendClient extends BaseHttpClient {
 
   public requestSystemUpdate(): Promise<ApiRespSystemUpdate> {
     return this.post('/api/v1/system/update');
+  }
+
+  public getIDCQueryConfig(): Promise<ApiRespIDCQueryConfig> {
+    return this.get('/api/v1/system/idc-query');
+  }
+
+  public updateIDCQueryConfig(
+    config: UpdateIDCQueryConfig,
+  ): Promise<ApiRespIDCQueryConfig> {
+    return this.put('/api/v1/system/idc-query', config);
   }
 
   public updateWizardStatus(status: 'skipped' | 'completed'): Promise<void> {

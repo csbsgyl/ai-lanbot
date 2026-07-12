@@ -143,6 +143,66 @@ test.describe('authenticated app shell', () => {
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
   });
 
+  test('IDC query settings save credentials without returning the token', async ({
+    page,
+  }) => {
+    await installLangBotApiMocks(page, { authenticated: true });
+
+    await page.goto('/home/bots');
+    await page.getByRole('button', { name: 'IDC Query' }).first().click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('heading', { name: 'IDC Query' }),
+    ).toBeVisible();
+    await expect(dialog.getByText('Gateway not configured')).toBeVisible();
+
+    await dialog
+      .getByLabel('Gateway URL')
+      .fill('https://query.example.com/api/');
+    await dialog.getByLabel('Request timeout').fill('15');
+    await dialog.getByLabel('Service token').fill('playwright-secret-token');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.getByText('IDC query settings saved')).toBeVisible();
+    await expect(dialog.getByText('Gateway configured')).toBeVisible();
+    await expect(dialog.getByLabel('Gateway URL')).toHaveValue(
+      'https://query.example.com/api',
+    );
+    await expect(dialog.getByLabel('Service token')).toHaveValue('');
+    await expect(dialog.getByText('Configured').last()).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Clear token' }).click();
+    await expect(
+      dialog.getByText('The current service token will be cleared on save.'),
+    ).toBeVisible();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog.getByText('Not configured')).toBeVisible();
+  });
+
+  test('IDC query settings fit a mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installLangBotApiMocks(page, { authenticated: true });
+
+    await page.goto('/home/bots');
+    await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
+    await page.getByRole('button', { name: 'IDC Query' }).first().click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Gateway URL')).toBeVisible();
+    await expect(dialog.getByLabel('Request timeout')).toBeVisible();
+    await expect(dialog.getByLabel('Service token')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Save' })).toBeVisible();
+
+    const bounds = await dialog.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+  });
+
   test('/home/skills?action=create creates a manual skill', async ({
     page,
   }) => {

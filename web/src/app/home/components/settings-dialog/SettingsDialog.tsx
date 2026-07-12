@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyRound, Sparkles, Settings, HardDrive } from 'lucide-react';
+import {
+  HardDrive,
+  KeyRound,
+  ServerCog,
+  Settings,
+  Sparkles,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,12 +28,14 @@ import AccountSettingsPanel from '@/app/home/components/account-settings-dialog/
 import ApiIntegrationPanel from '@/app/home/components/api-integration-dialog/ApiIntegrationPanel';
 import ModelsPanel from '@/app/home/components/models-dialog/ModelsPanel';
 import StorageAnalysisPanel from '@/app/home/components/storage-analysis-dialog/StorageAnalysisPanel';
+import IDCQuerySettingsPanel from '@/app/home/components/idc-query-settings-dialog/IDCQuerySettingsPanel';
 
 // The set of settings sections shown in the unified dialog. The string values
 // are also reused as the ?action= query param suffix so deep links keep working.
 export type SettingsSection =
   | 'account'
   | 'apiIntegration'
+  | 'idcQuery'
   | 'models'
   | 'storageAnalysis';
 
@@ -37,6 +45,7 @@ export type SettingsSection =
 export const SETTINGS_ACTION_BY_SECTION: Record<SettingsSection, string> = {
   account: 'showAccountSettings',
   apiIntegration: 'showApiIntegrationSettings',
+  idcQuery: 'showIDCQuerySettings',
   models: 'showModelSettings',
   storageAnalysis: 'showStorageAnalysis',
 };
@@ -96,6 +105,13 @@ export default function SettingsDialog({
       title: t('common.apiIntegration'),
       description: t('common.apiIntegrationDescription'),
       icon: <KeyRound className="size-4" />,
+    },
+    {
+      id: 'idcQuery',
+      label: t('settingsDialog.nav.idcQuery'),
+      title: t('idcQuery.title'),
+      description: t('idcQuery.description'),
+      icon: <ServerCog className="size-4" />,
     },
     {
       id: 'storageAnalysis',
@@ -210,6 +226,11 @@ export default function SettingsDialog({
               {section === 'apiIntegration' && (
                 <ApiIntegrationPanel
                   active={open && section === 'apiIntegration'}
+                />
+              )}
+              {section === 'idcQuery' && (
+                <IDCQuerySettingsPanel
+                  active={open && section === 'idcQuery'}
                 />
               )}
               {section === 'storageAnalysis' && (

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -15,7 +16,12 @@ def _as_bool(value: object, default: bool) -> bool:
         return default
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+    normalized = str(value).strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    return default
 
 
 def _read_runtime_config(path: Path) -> dict[str, str]:
@@ -32,14 +38,21 @@ def _read_runtime_config(path: Path) -> dict[str, str]:
     return values
 
 
+def _config_signature(path: Path) -> tuple[int, int, int] | None:
+    try:
+        file_stat = path.stat()
+    except OSError:
+        return None
+    return (file_stat.st_ino, file_stat.st_mtime_ns, file_stat.st_size)
+
+
 class IDCQueryPlugin(BasePlugin):
     async def initialize(self) -> None:
-        config = self.get_config() or {}
+        self._plugin_config = self.get_config() or {}
         plugin_root = Path(__file__).resolve().parent
         runtime_data_dir = Path('/app/data/idc-query')
-        runtime_config = _read_runtime_config(
-            Path(os.getenv('IDC_QUERY_CONFIG_PATH', str(runtime_data_dir / 'config.env')))
-        )
+        self._runtime_config_path = Path(os.getenv('IDC_QUERY_CONFIG_PATH', str(runtime_data_dir / 'config.env')))
+        self._gateway_reload_lock = asyncio.Lock()
         default_state_path = (
             runtime_data_dir / 'bindings.json'
             if runtime_data_dir.is_dir()
@@ -51,6 +64,29 @@ class IDCQueryPlugin(BasePlugin):
                 str(default_state_path),
             )
         )
+        gateway, self._runtime_config_signature = self._load_gateway()
+
+        config = self._plugin_config
+        self.idc_query_service = IDCQueryService(
+            store=JsonBindingStore(state_path),
+            gateway=gateway,
+            exclusive_mode=_as_bool(config.get('exclusive_mode'), True),
+            sensitive_binder_only=_as_bool(config.get('sensitive_binder_only'), True),
+        )
+        self.allow_simulated_events = _as_bool(config.get('allow_simulated_events'), False)
+        await self.idc_query_service.initialize()
+
+    def _load_gateway(self) -> tuple[IDCQueryGateway, tuple[int, int, int] | None]:
+        runtime_config: dict[str, str] = {}
+        signature = _config_signature(self._runtime_config_path)
+        for _ in range(2):
+            before_read = signature
+            runtime_config = _read_runtime_config(self._runtime_config_path)
+            signature = _config_signature(self._runtime_config_path)
+            if before_read == signature:
+                break
+
+        config = self._plugin_config
         api_base_url = (
             os.getenv('IDC_QUERY_API_BASE_URL')
             or runtime_config.get('IDC_QUERY_API_BASE_URL')
@@ -67,20 +103,31 @@ class IDCQueryPlugin(BasePlugin):
             True,
         )
 
-        gateway = IDCQueryGateway(
-            base_url=api_base_url,
-            token=api_token,
-            timeout_seconds=timeout_seconds,
-            verify_tls=verify_tls,
+        return (
+            IDCQueryGateway(
+                base_url=api_base_url,
+                token=api_token,
+                timeout_seconds=timeout_seconds,
+                verify_tls=verify_tls,
+            ),
+            signature,
         )
-        self.idc_query_service = IDCQueryService(
-            store=JsonBindingStore(state_path),
-            gateway=gateway,
-            exclusive_mode=_as_bool(config.get('exclusive_mode'), True),
-            sensitive_binder_only=_as_bool(config.get('sensitive_binder_only'), True),
-        )
-        self.allow_simulated_events = _as_bool(config.get('allow_simulated_events'), False)
-        await self.idc_query_service.initialize()
+
+    async def _reload_gateway_if_changed(self) -> None:
+        signature = _config_signature(self._runtime_config_path)
+        if signature == self._runtime_config_signature:
+            return
+
+        async with self._gateway_reload_lock:
+            signature = _config_signature(self._runtime_config_path)
+            if signature == self._runtime_config_signature:
+                return
+            try:
+                gateway, loaded_signature = self._load_gateway()
+            except (OSError, TypeError, UnicodeError, ValueError):
+                return
+            self.idc_query_service.gateway = gateway
+            self._runtime_config_signature = loaded_signature
 
     async def handle_idc_query(
         self,
@@ -90,6 +137,7 @@ class IDCQueryPlugin(BasePlugin):
         user_id: str,
         message_id: str,
     ) -> HandleResult:
+        await self._reload_gateway_if_changed()
         return await self.idc_query_service.handle(
             text=text,
             group_id=group_id,

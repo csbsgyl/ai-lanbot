@@ -26,6 +26,19 @@ container user and filesystem. When a gateway token is configured, install only
 trusted plugins in that runtime. A later production-hardening phase should move
 the IDC connector into a dedicated service identity or isolated runtime.
 
+## LangBot configuration
+
+Administrators configure the gateway under **Settings > IDC Query**. The
+settings endpoint requires a user login token and deliberately rejects API-key
+and MCP authentication. Reading settings returns only `token_configured`; the
+service token itself is never returned. Configuration is atomically written to
+`data/idc-query/config.env` with owner-only permissions, and the plugin detects
+file replacement before processing the next query.
+
+The one-click script also accepts `IDC_QUERY_API_BASE_URL`,
+`IDC_QUERY_API_TOKEN`, `IDC_QUERY_TIMEOUT_SECONDS`, and
+`IDC_QUERY_VERIFY_TLS` for unattended initial provisioning.
+
 ## Response envelope
 
 Successful responses use:

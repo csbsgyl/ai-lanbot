@@ -25,6 +25,7 @@ The script also checks Docker image access automatically. By default it starts f
 - Automatically uses the Docker accelerator for runtime/base images when direct Docker access is unavailable and the accelerator exposes the required image.
 - Starts the LangBot and Plugin Runtime core services without the optional Box profile.
 - Installs or updates the bundled IDC query plugin under `docker/data/plugins/idc_query`.
+- Adds authenticated IDC gateway configuration under WebUI **Settings > IDC Query**.
 - Preserves IDC group bindings separately under `docker/data/idc-query` during source updates.
 - Keeps persistent data under `docker/data`.
 - Waits for the Plugin Runtime to become healthy before starting LangBot.
@@ -87,12 +88,21 @@ and removes that container without deleting its persisted data directory.
 
 The IDC plugin is installed even when its gateway is not configured. In that
 state it can display its command menu, but binding and data queries return a
-configuration notice instead of fabricated results. The deployment variables
-are written to `docker/data/idc-query/config.env` with owner-only permissions
-and preserved on later one-click upgrades. The plugin reads this mounted file
-directly because the Linux Plugin Runtime intentionally starts plugin processes
-with a clean environment. The token is not exposed through Docker container
-environment metadata and must not be committed.
+configuration notice instead of fabricated results. After signing in as an
+administrator, open **Settings > IDC Query** to configure the gateway URL,
+service token, request timeout, and TLS verification. Saved changes are loaded
+by the plugin on the next query without restarting the containers.
+
+The WebUI stores these values in `docker/data/idc-query/config.env` with
+owner-only permissions and preserves them on later one-click upgrades. The GET
+API only reports whether a token exists; it never returns the token value. The
+credential endpoint accepts administrator login tokens only, not API keys or
+MCP authentication. The Plugin Runtime reads the mounted file directly because
+plugin processes start with a clean environment. The token is not exposed
+through Docker container environment metadata and must not be committed.
+
+The `IDC_QUERY_*` deployment variables above remain available for unattended
+first-time provisioning. Later changes can be made from the WebUI.
 
 The normalized gateway contract is documented in
 [`IDC_QUERY_GATEWAY.md`](IDC_QUERY_GATEWAY.md).

@@ -382,6 +382,22 @@ export interface ApiRespSystemUpdate {
   check_error: string;
 }
 
+export interface ApiRespIDCQueryConfig {
+  base_url: string;
+  timeout_seconds: number;
+  verify_tls: boolean;
+  token_configured: boolean;
+  configured: boolean;
+}
+
+export interface UpdateIDCQueryConfig {
+  base_url?: string;
+  token?: string;
+  clear_token?: boolean;
+  timeout_seconds?: number;
+  verify_tls?: boolean;
+}
+
 export interface RagMigrationStatusResp {
   needed: boolean;
   internal_kb_count: number;

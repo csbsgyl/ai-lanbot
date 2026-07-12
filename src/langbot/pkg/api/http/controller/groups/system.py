@@ -4,6 +4,7 @@ import quart
 import sqlalchemy
 
 from .. import group
+from ...service import idc_query_config
 from ...service import system_update
 from .....utils import constants
 from .....entity.persistence.metadata import Metadata
@@ -81,6 +82,19 @@ class SystemRouterGroup(group.RouterGroup):
                 return self.http_status(409, 409, str(exc))
             except system_update.UpdateCheckError as exc:
                 return self.http_status(503, 503, str(exc))
+
+        @self.route('/idc-query', methods=['GET', 'PUT'], auth_type=group.AuthType.USER_TOKEN)
+        async def _() -> str:
+            try:
+                if quart.request.method == 'GET':
+                    return self.success(data=await self.ap.idc_query_config_service.get_config())
+                payload = await quart.request.get_json(silent=True)
+                return self.success(data=await self.ap.idc_query_config_service.update_config(payload))
+            except idc_query_config.IDCQueryConfigValidationError as exc:
+                return self.http_status(400, 400, str(exc))
+            except (OSError, UnicodeError) as exc:
+                self.ap.logger.error(f'Failed to access IDC query configuration: {exc}')
+                return self.http_status(500, 500, 'Failed to save IDC query configuration.')
 
         @self.route('/wizard/completed', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
         async def _() -> str:

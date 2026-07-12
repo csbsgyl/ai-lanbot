@@ -70,6 +70,13 @@ interface BotMock {
 interface LangBotApiMockState {
   bots: BotMock[];
   counters: Record<string, number>;
+  idcQueryConfig: {
+    base_url: string;
+    timeout_seconds: number;
+    verify_tls: boolean;
+    token_configured: boolean;
+    configured: boolean;
+  };
   knowledgeBases: KnowledgeBaseMock[];
   mcpServers: MCPServerMock[];
   monitoringData: unknown;
@@ -452,6 +459,33 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
       updated_at: '2026-07-12T00:00:00Z',
       check_error: '',
     });
+  }
+
+  if (path === '/api/v1/system/idc-query') {
+    if (method === 'PUT') {
+      const payload = parseJsonBody(route);
+      const replacementToken = String(payload.token || '').trim();
+      const clearToken = payload.clear_token === true;
+      state.idcQueryConfig = {
+        base_url: String(
+          payload.base_url ?? state.idcQueryConfig.base_url,
+        ).replace(/\/$/, ''),
+        timeout_seconds: Number(
+          payload.timeout_seconds ?? state.idcQueryConfig.timeout_seconds,
+        ),
+        verify_tls:
+          typeof payload.verify_tls === 'boolean'
+            ? payload.verify_tls
+            : state.idcQueryConfig.verify_tls,
+        token_configured: clearToken
+          ? false
+          : Boolean(replacementToken) || state.idcQueryConfig.token_configured,
+        configured: Boolean(
+          String(payload.base_url ?? state.idcQueryConfig.base_url).trim(),
+        ),
+      };
+    }
+    return fulfillJson(route, state.idcQueryConfig);
   }
 
   if (path === '/api/v1/user/account-info') {
@@ -998,6 +1032,13 @@ export async function installLangBotApiMocks(
   const state: LangBotApiMockState = {
     bots: [],
     counters: {},
+    idcQueryConfig: {
+      base_url: '',
+      timeout_seconds: 8,
+      verify_tls: true,
+      token_configured: false,
+      configured: false,
+    },
     knowledgeBases: [],
     mcpServers: [],
     monitoringData: monitoringData || emptyMonitoringData(),
