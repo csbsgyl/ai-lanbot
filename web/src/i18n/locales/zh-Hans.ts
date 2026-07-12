@@ -1494,6 +1494,7 @@ const zhHans = {
     description: '配置客户自助查询网关和服务鉴权',
     tabs: {
       configuration: '配置',
+      bindings: '群绑定',
       audit: '最近操作',
     },
     configured: '网关已配置',
@@ -1527,6 +1528,18 @@ const zhHans = {
     saveError: 'IDC 查询配置保存失败',
     invalidTimeout: '超时时间必须在 1 到 120 秒之间',
     invalidRateLimit: '频率上限必须是 1 到 1000 之间的整数',
+    bindings: {
+      refresh: '刷新群绑定',
+      loading: '正在加载群绑定...',
+      loadError: '无法加载 IDC 群绑定',
+      empty: '暂时没有已绑定的群',
+      generatedAt: '更新时间 {{time}} · 显示 {{count}} / {{total}} 条',
+      boundAt: '绑定时间',
+      customer: '客户',
+      group: 'QQ 群',
+      boundBy: '绑定人',
+      unnamed: '未命名会员',
+    },
     audit: {
       refresh: '刷新最近操作',
       loading: '正在加载最近操作...',

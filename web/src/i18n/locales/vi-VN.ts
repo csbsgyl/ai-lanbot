@@ -1563,6 +1563,7 @@ const viVN = {
     description: 'Cấu hình cổng truy vấn khách hàng có xác thực',
     tabs: {
       configuration: 'Cấu hình',
+      bindings: 'Nhóm đã liên kết',
       audit: 'Hoạt động gần đây',
     },
     configured: 'Đã cấu hình cổng',
@@ -1596,6 +1597,18 @@ const viVN = {
     saveError: 'Không thể lưu cài đặt truy vấn IDC',
     invalidTimeout: 'Thời gian chờ phải từ 1 đến 120 giây',
     invalidRateLimit: 'Giới hạn phải là số nguyên từ 1 đến 1000',
+    bindings: {
+      refresh: 'Làm mới liên kết',
+      loading: 'Đang tải các nhóm đã liên kết...',
+      loadError: 'Không thể tải các nhóm đã liên kết IDC',
+      empty: 'Chưa có nhóm nào được liên kết',
+      generatedAt: 'Cập nhật {{time}} · hiển thị {{count}} / {{total}}',
+      boundAt: 'Thời gian liên kết',
+      customer: 'Khách hàng',
+      group: 'Nhóm QQ',
+      boundBy: 'Người liên kết',
+      unnamed: 'Thành viên chưa đặt tên',
+    },
     audit: {
       refresh: 'Làm mới hoạt động',
       loading: 'Đang tải hoạt động gần đây...',

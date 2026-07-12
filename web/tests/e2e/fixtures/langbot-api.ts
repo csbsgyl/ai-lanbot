@@ -80,6 +80,7 @@ interface LangBotApiMockState {
     bind_attempts_per_10_minutes: number;
   };
   idcQueryAuditEvents: JsonRecord[];
+  idcQueryBindings: JsonRecord[];
   knowledgeBases: KnowledgeBaseMock[];
   mcpServers: MCPServerMock[];
   monitoringData: unknown;
@@ -503,6 +504,15 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     return fulfillJson(route, {
       events: state.idcQueryAuditEvents,
       count: state.idcQueryAuditEvents.length,
+      generated_at: '2026-07-12T10:05:00+00:00',
+    });
+  }
+
+  if (path === '/api/v1/system/idc-query/bindings') {
+    return fulfillJson(route, {
+      bindings: state.idcQueryBindings,
+      count: state.idcQueryBindings.length,
+      total: state.idcQueryBindings.length,
       generated_at: '2026-07-12T10:05:00+00:00',
     });
   }
@@ -1082,6 +1092,15 @@ export async function installLangBotApiMocks(
         member_id: '10086',
         request_id: 'request-1',
         duration_ms: 2,
+      },
+    ],
+    idcQueryBindings: [
+      {
+        group_id: 'qq-group-openid-222233334444',
+        member_id: '10086',
+        bound_by: 'qq-member-openid-1234567890',
+        bound_at: '2026-07-12T09:00:00+00:00',
+        member_name: 'Example IDC Customer',
       },
     ],
     knowledgeBases: [],

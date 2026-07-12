@@ -179,6 +179,15 @@ test.describe('authenticated app shell', () => {
       '25',
     );
 
+    await dialog.getByRole('tab', { name: 'Group bindings' }).click();
+    await expect(dialog.getByText('Example IDC Customer')).toBeVisible();
+    await expect(dialog).toContainText('qq-***44');
+    await expect(dialog).toContainText('qq-***90');
+    await expect(dialog).toContainText('1***6');
+    await expect(dialog).not.toContainText('qq-group-openid-222233334444');
+    await expect(dialog).not.toContainText('qq-member-openid-1234567890');
+    await expect(dialog).not.toContainText('10086');
+
     await dialog.getByRole('tab', { name: 'Recent activity' }).click();
     await expect(dialog.getByText('IP query')).toBeVisible();
     await expect(dialog.getByText('Success')).toBeVisible();
@@ -214,6 +223,9 @@ test.describe('authenticated app shell', () => {
     await expect(dialog.getByLabel('Request timeout')).toBeVisible();
     await expect(dialog.getByLabel('Service token')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Save' })).toBeVisible();
+
+    await dialog.getByRole('tab', { name: 'Group bindings' }).click();
+    await expect(dialog.getByText('Example IDC Customer')).toBeVisible();
 
     const bounds = await dialog.boundingBox();
     expect(bounds).not.toBeNull();

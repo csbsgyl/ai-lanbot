@@ -1492,6 +1492,7 @@ const zhHant = {
     description: '設定客戶自助查詢閘道和服務驗證',
     tabs: {
       configuration: '設定',
+      bindings: '群組綁定',
       audit: '最近操作',
     },
     configured: '閘道已設定',
@@ -1525,6 +1526,18 @@ const zhHant = {
     saveError: 'IDC 查詢設定儲存失敗',
     invalidTimeout: '逾時時間必須介於 1 到 120 秒之間',
     invalidRateLimit: '頻率上限必須是 1 到 1000 之間的整數',
+    bindings: {
+      refresh: '重新整理群組綁定',
+      loading: '正在載入群組綁定...',
+      loadError: '無法載入 IDC 群組綁定',
+      empty: '暫時沒有已綁定的群組',
+      generatedAt: '更新時間 {{time}} · 顯示 {{count}} / {{total}} 筆',
+      boundAt: '綁定時間',
+      customer: '客戶',
+      group: 'QQ 群組',
+      boundBy: '綁定人',
+      unnamed: '未命名會員',
+    },
     audit: {
       refresh: '重新整理最近操作',
       loading: '正在載入最近操作...',

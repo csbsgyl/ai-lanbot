@@ -1595,6 +1595,7 @@ const esES = {
     description: 'Configura la pasarela autenticada de consultas de clientes',
     tabs: {
       configuration: 'Configuración',
+      bindings: 'Grupos vinculados',
       audit: 'Actividad reciente',
     },
     configured: 'Pasarela configurada',
@@ -1629,6 +1630,18 @@ const esES = {
     saveError: 'No se pudo guardar la configuración de consultas IDC',
     invalidTimeout: 'El tiempo de espera debe estar entre 1 y 120 segundos',
     invalidRateLimit: 'Los límites deben ser enteros entre 1 y 1000',
+    bindings: {
+      refresh: 'Actualizar vínculos',
+      loading: 'Cargando grupos vinculados...',
+      loadError: 'No se pudieron cargar los grupos vinculados de IDC',
+      empty: 'Todavía no hay grupos vinculados',
+      generatedAt: 'Actualizado {{time}} · mostrando {{count}} de {{total}}',
+      boundAt: 'Vinculado el',
+      customer: 'Cliente',
+      group: 'Grupo QQ',
+      boundBy: 'Vinculado por',
+      unnamed: 'Miembro sin nombre',
+    },
     audit: {
       refresh: 'Actualizar actividad',
       loading: 'Cargando actividad reciente...',

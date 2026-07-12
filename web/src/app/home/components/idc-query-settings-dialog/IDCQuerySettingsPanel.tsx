@@ -5,6 +5,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Link2,
   Loader2,
   RefreshCw,
   RotateCcw,
@@ -22,12 +23,14 @@ import { backendClient } from '@/app/infra/http';
 import type {
   ApiRespIDCQueryConfig,
   IDCQueryAuditEvent,
+  IDCQueryBinding,
 } from '@/app/infra/entities/api';
 import {
   PanelBody,
   PanelToolbar,
 } from '@/app/home/components/settings-dialog/panel-layout';
 import IDCQueryAuditTable from './IDCQueryAuditTable';
+import IDCQueryBindingTable from './IDCQueryBindingTable';
 
 interface IDCQuerySettingsPanelProps {
   active: boolean;
@@ -63,6 +66,11 @@ export default function IDCQuerySettingsPanel({
   const [auditGeneratedAt, setAuditGeneratedAt] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState('');
+  const [bindings, setBindings] = useState<IDCQueryBinding[]>([]);
+  const [bindingsTotal, setBindingsTotal] = useState(0);
+  const [bindingsGeneratedAt, setBindingsGeneratedAt] = useState('');
+  const [bindingsLoading, setBindingsLoading] = useState(false);
+  const [bindingsError, setBindingsError] = useState('');
 
   const applyConfig = useCallback((config: ApiRespIDCQueryConfig) => {
     setBaseUrl(config.base_url);
@@ -104,6 +112,21 @@ export default function IDCQuerySettingsPanel({
     }
   }, []);
 
+  const loadBindings = useCallback(async () => {
+    setBindingsLoading(true);
+    setBindingsError('');
+    try {
+      const result = await backendClient.getIDCQueryBindings(200);
+      setBindings(result.bindings);
+      setBindingsTotal(result.total);
+      setBindingsGeneratedAt(result.generated_at);
+    } catch (loadError) {
+      setBindingsError(getErrorMessage(loadError));
+    } finally {
+      setBindingsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (active) loadConfig();
   }, [active, loadConfig]);
@@ -111,6 +134,10 @@ export default function IDCQuerySettingsPanel({
   useEffect(() => {
     if (active && activeTab === 'audit') loadAudit();
   }, [active, activeTab, loadAudit]);
+
+  useEffect(() => {
+    if (active && activeTab === 'bindings') loadBindings();
+  }, [active, activeTab, loadBindings]);
 
   const saveConfig = async () => {
     const parsedTimeout = Number(timeoutSeconds);
@@ -177,13 +204,33 @@ export default function IDCQuerySettingsPanel({
     >
       <PanelToolbar>
         <TabsList>
-          <TabsTrigger value="configuration">
+          <TabsTrigger
+            value="configuration"
+            aria-label={t('idcQuery.tabs.configuration')}
+            title={t('idcQuery.tabs.configuration')}
+          >
             <Settings2 />
-            {t('idcQuery.tabs.configuration')}
+            <span className="hidden sm:inline">
+              {t('idcQuery.tabs.configuration')}
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="audit">
+          <TabsTrigger
+            value="bindings"
+            aria-label={t('idcQuery.tabs.bindings')}
+            title={t('idcQuery.tabs.bindings')}
+          >
+            <Link2 />
+            <span className="hidden sm:inline">
+              {t('idcQuery.tabs.bindings')}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="audit"
+            aria-label={t('idcQuery.tabs.audit')}
+            title={t('idcQuery.tabs.audit')}
+          >
             <Activity />
-            {t('idcQuery.tabs.audit')}
+            <span className="hidden sm:inline">{t('idcQuery.tabs.audit')}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -219,12 +266,26 @@ export default function IDCQuerySettingsPanel({
             type="button"
             variant="outline"
             size="icon"
-            onClick={loadAudit}
-            disabled={auditLoading}
-            aria-label={t('idcQuery.audit.refresh')}
-            title={t('idcQuery.audit.refresh')}
+            onClick={activeTab === 'bindings' ? loadBindings : loadAudit}
+            disabled={activeTab === 'bindings' ? bindingsLoading : auditLoading}
+            aria-label={t(
+              activeTab === 'bindings'
+                ? 'idcQuery.bindings.refresh'
+                : 'idcQuery.audit.refresh',
+            )}
+            title={t(
+              activeTab === 'bindings'
+                ? 'idcQuery.bindings.refresh'
+                : 'idcQuery.audit.refresh',
+            )}
           >
-            <RefreshCw className={auditLoading ? 'animate-spin' : ''} />
+            <RefreshCw
+              className={
+                (activeTab === 'bindings' ? bindingsLoading : auditLoading)
+                  ? 'animate-spin'
+                  : ''
+              }
+            />
           </Button>
         )}
       </PanelToolbar>
@@ -420,6 +481,20 @@ export default function IDCQuerySettingsPanel({
             </form>
           )}
         </PanelBody>
+      </TabsContent>
+
+      <TabsContent
+        value="bindings"
+        className="mt-0 min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+      >
+        <IDCQueryBindingTable
+          bindings={bindings}
+          generatedAt={bindingsGeneratedAt}
+          total={bindingsTotal}
+          loading={bindingsLoading}
+          error={bindingsError}
+          onRetry={loadBindings}
+        />
       </TabsContent>
 
       <TabsContent

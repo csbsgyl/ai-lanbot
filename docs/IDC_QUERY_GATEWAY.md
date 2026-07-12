@@ -46,6 +46,13 @@ user identifiers, bound member identifier, request ID, timestamp, and duration.
 It does not store chat text, verification codes, IP arguments, service tokens,
 gateway error messages, or response payloads.
 
+The **Group bindings** tab reads a bounded, validated snapshot of active local
+bindings. It is deliberately read-only: an administrative deletion that did
+not call the gateway would leave the two authorization states inconsistent.
+Binding state and its committed recovery copy are atomically written with
+owner-only permissions. Both the bindings and audit endpoints require a user
+login token and reject API-key or MCP authentication.
+
 The one-click script also accepts `IDC_QUERY_API_BASE_URL`,
 `IDC_QUERY_API_TOKEN`, `IDC_QUERY_TIMEOUT_SECONDS`, and
 `IDC_QUERY_VERIFY_TLS`, `IDC_QUERY_REQUESTS_PER_MINUTE`, and

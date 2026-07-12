@@ -30,9 +30,16 @@ MAX_AUDIT_LIMIT = 200
 AUDIT_BACKUP_COUNT = 3
 AUDIT_COMMANDS = {'bind', 'unbind', 'ip', 'protection', 'block', 'traffic', 'businesses', 'tickets', 'balance'}
 AUDIT_OUTCOMES = {'success', 'denied', 'rate_limited', 'gateway_error', 'internal_error'}
+DEFAULT_BINDINGS_LIMIT = 200
+MAX_BINDINGS_LIMIT = 500
+MAX_BINDINGS_FILE_BYTES = 5 * 1024 * 1024
 
 
 class IDCQueryConfigValidationError(ValueError):
+    pass
+
+
+class IDCQueryBindingStateError(RuntimeError):
     pass
 
 
@@ -264,6 +271,73 @@ class IDCQueryConfigService:
             'member_id': cls._limited_text(payload.get('member_id'), 160),
             'request_id': cls._limited_text(payload.get('request_id'), 160),
             'duration_ms': max(0, min(round(duration), 3_600_000)),
+        }
+
+    async def get_bindings(self, limit: int = DEFAULT_BINDINGS_LIMIT) -> dict[str, Any]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_BINDINGS_LIMIT:
+            raise IDCQueryConfigValidationError(f'Binding limit must be between 1 and {MAX_BINDINGS_LIMIT}.')
+
+        bindings = await asyncio.to_thread(self._read_bindings)
+        selected = bindings[:limit]
+        return {
+            'bindings': selected,
+            'count': len(selected),
+            'total': len(bindings),
+            'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+
+    @classmethod
+    def _read_bindings(cls) -> list[dict[str, str]]:
+        binding_path = Path(paths.get_data_path('idc-query', 'bindings.json'))
+        try:
+            with binding_path.open('rb') as binding_file:
+                raw_payload = binding_file.read(MAX_BINDINGS_FILE_BYTES + 1)
+        except FileNotFoundError:
+            return []
+
+        if len(raw_payload) > MAX_BINDINGS_FILE_BYTES:
+            raise IDCQueryBindingStateError('IDC binding state exceeds the supported size.')
+        try:
+            payload = json.loads(raw_payload.decode('utf-8'))
+        except (json.JSONDecodeError, UnicodeError) as exc:
+            raise IDCQueryBindingStateError('IDC binding state is invalid.') from exc
+        if not isinstance(payload, dict) or payload.get('version') != 1:
+            raise IDCQueryBindingStateError('IDC binding state version is unsupported.')
+        raw_bindings = payload.get('bindings')
+        if not isinstance(raw_bindings, dict):
+            raise IDCQueryBindingStateError('IDC binding state is invalid.')
+
+        bindings = []
+        for raw_group_id, raw_binding in raw_bindings.items():
+            binding = cls._normalize_binding(raw_group_id, raw_binding)
+            if binding is not None:
+                bindings.append(binding)
+        bindings.sort(key=lambda binding: binding['bound_at'], reverse=True)
+        return bindings
+
+    @classmethod
+    def _normalize_binding(cls, raw_group_id: Any, payload: Any) -> dict[str, str] | None:
+        if not isinstance(payload, dict):
+            return None
+        group_id = cls._limited_text(raw_group_id, 160)
+        payload_group_id = cls._limited_text(payload.get('group_id'), 160)
+        member_id = cls._limited_text(payload.get('member_id'), 160)
+        bound_by = cls._limited_text(payload.get('bound_by'), 160)
+        bound_at = cls._limited_text(payload.get('bound_at'), 64)
+        if not group_id or payload_group_id != group_id or not member_id or not bound_by or not bound_at:
+            return None
+        try:
+            parsed_bound_at = datetime.datetime.fromisoformat(bound_at.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        if parsed_bound_at.tzinfo is None:
+            return None
+        return {
+            'group_id': group_id,
+            'member_id': member_id,
+            'bound_by': bound_by,
+            'bound_at': bound_at,
+            'member_name': cls._limited_text(payload.get('member_name'), 200),
         }
 
     @staticmethod

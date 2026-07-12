@@ -1566,6 +1566,7 @@ const jaJP = {
     description: '認証付き顧客クエリゲートウェイを設定します',
     tabs: {
       configuration: '設定',
+      bindings: 'グループ連携',
       audit: '最近の操作',
     },
     configured: 'ゲートウェイ設定済み',
@@ -1599,6 +1600,18 @@ const jaJP = {
     saveError: 'IDC クエリ設定を保存できませんでした',
     invalidTimeout: 'タイムアウトは 1〜120 秒で指定してください',
     invalidRateLimit: '頻度上限は 1〜1000 の整数で指定してください',
+    bindings: {
+      refresh: 'グループ連携を更新',
+      loading: 'グループ連携を読み込み中...',
+      loadError: 'IDC グループ連携を読み込めませんでした',
+      empty: '連携済みのグループはありません',
+      generatedAt: '更新 {{time}} · {{total}} 件中 {{count}} 件を表示',
+      boundAt: '連携日時',
+      customer: '顧客',
+      group: 'QQ グループ',
+      boundBy: '連携実行者',
+      unnamed: '名称未設定の会員',
+    },
     audit: {
       refresh: '最近の操作を更新',
       loading: '最近の操作を読み込み中...',

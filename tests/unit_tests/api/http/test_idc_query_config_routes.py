@@ -58,6 +58,22 @@ async def idc_config_route_client():
             'generated_at': '2026-07-12T10:00:01+00:00',
         }
     )
+    app.idc_query_config_service.get_bindings = AsyncMock(
+        return_value={
+            'bindings': [
+                {
+                    'group_id': 'group-1',
+                    'member_id': 'member-1',
+                    'bound_by': 'user-1',
+                    'bound_at': '2026-07-12T10:00:00+00:00',
+                    'member_name': 'Customer One',
+                }
+            ],
+            'count': 1,
+            'total': 1,
+            'generated_at': '2026-07-12T10:00:01+00:00',
+        }
+    )
 
     quart_app = quart.Quart(__name__)
     router = SystemRouterGroup(app, quart_app)
@@ -72,10 +88,12 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     get_response = await client.get('/api/v1/system/idc-query')
     put_response = await client.put('/api/v1/system/idc-query', json={})
     audit_response = await client.get('/api/v1/system/idc-query/audit')
+    bindings_response = await client.get('/api/v1/system/idc-query/bindings')
 
     assert get_response.status_code == 401
     assert put_response.status_code == 401
     assert audit_response.status_code == 401
+    assert bindings_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -97,6 +115,13 @@ async def test_idc_config_routes_reject_api_key_authentication(idc_config_route_
     )
     assert audit_response.status_code == 401
     app.idc_query_config_service.get_audit_events.assert_not_awaited()
+
+    bindings_response = await client.get(
+        '/api/v1/system/idc-query/bindings',
+        headers={'X-API-Key': 'automation-key'},
+    )
+    assert bindings_response.status_code == 401
+    app.idc_query_config_service.get_bindings.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -194,4 +219,46 @@ async def test_idc_audit_route_does_not_expose_filesystem_errors(idc_config_rout
 
     assert response.status_code == 500
     assert (await response.get_json())['msg'] == 'Failed to read IDC query audit log.'
+    assert '/private/path' not in (await response.get_data(as_text=True))
+
+
+@pytest.mark.asyncio
+async def test_idc_bindings_route_returns_active_bindings(idc_config_route_client):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/idc-query/bindings?limit=50',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 200
+    assert (await response.get_json())['data']['bindings'][0]['member_name'] == 'Customer One'
+    app.idc_query_config_service.get_bindings.assert_awaited_once_with(50)
+
+
+@pytest.mark.asyncio
+async def test_idc_bindings_route_rejects_invalid_limit(idc_config_route_client):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/idc-query/bindings?limit=invalid',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 400
+    app.idc_query_config_service.get_bindings.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_idc_bindings_route_does_not_expose_state_errors(idc_config_route_client):
+    client, app = idc_config_route_client
+    app.idc_query_config_service.get_bindings.side_effect = OSError('/private/path/bindings.json denied')
+
+    response = await client.get(
+        '/api/v1/system/idc-query/bindings',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 500
+    assert (await response.get_json())['msg'] == 'Failed to read IDC query bindings.'
     assert '/private/path' not in (await response.get_data(as_text=True))

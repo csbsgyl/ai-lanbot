@@ -4,7 +4,7 @@ metadata:
   author: csbsgyl
   name: idc-query
   repository: https://github.com/csbsgyl/ai-lanbot
-  version: 0.2.0
+  version: 0.3.0
   description:
     en_US: Deterministic IDC self-service queries for QQ Official bots.
     zh_Hans: 面向 QQ 官方机器人的 IDC 自助查询插件。

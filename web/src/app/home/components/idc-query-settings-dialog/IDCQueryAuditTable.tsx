@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table';
 import type { IDCQueryAuditEvent } from '@/app/infra/entities/api';
 import { PanelBody } from '@/app/home/components/settings-dialog/panel-layout';
+import { formatTimestamp, maskIdentifier } from './display';
 
 interface IDCQueryAuditTableProps {
   events: IDCQueryAuditEvent[];
@@ -19,19 +20,6 @@ interface IDCQueryAuditTableProps {
   loading: boolean;
   error: string;
   onRetry: () => void;
-}
-
-function maskIdentifier(value: string): string {
-  if (!value) return '-';
-  if (value.length <= 4) return '****';
-  if (value.length <= 7) return `${value.slice(0, 1)}***${value.slice(-1)}`;
-  return `${value.slice(0, 3)}***${value.slice(-2)}`;
-}
-
-function formatTimestamp(value: string): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function outcomeVariant(

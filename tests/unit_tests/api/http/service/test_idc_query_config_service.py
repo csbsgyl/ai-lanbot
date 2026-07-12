@@ -6,7 +6,9 @@ import stat
 
 import pytest
 
+from langbot.pkg.api.http.service import idc_query_config
 from langbot.pkg.api.http.service.idc_query_config import (
+    IDCQueryBindingStateError,
     IDCQueryConfigService,
     IDCQueryConfigValidationError,
 )
@@ -192,3 +194,82 @@ async def test_audit_reader_rejects_unknown_schema_and_invalid_limit(config_serv
     assert (await config_service.get_audit_events())['events'] == []
     with pytest.raises(IDCQueryConfigValidationError, match='between 1 and 200'):
         await config_service.get_audit_events(201)
+
+
+@pytest.mark.asyncio
+async def test_binding_reader_returns_latest_valid_bindings(config_service: IDCQueryConfigService):
+    binding_path = config_service.config_path.parent / 'bindings.json'
+    binding_path.parent.mkdir(parents=True)
+    binding_path.write_text(
+        json.dumps(
+            {
+                'version': 1,
+                'bindings': {
+                    'group-1': {
+                        'group_id': 'group-1',
+                        'member_id': 'member-1',
+                        'bound_by': 'user-1',
+                        'bound_at': '2026-07-12T10:01:00+00:00',
+                        'member_name': 'Customer One',
+                    },
+                    'group-2': {
+                        'group_id': 'group-2',
+                        'member_id': 'member-2',
+                        'bound_by': 'user-2',
+                        'bound_at': '2026-07-12T10:02:00+00:00',
+                        'member_name': 'Customer Two\nIgnored',
+                    },
+                    'group-invalid': {
+                        'group_id': 'different-group',
+                        'member_id': 'member-3',
+                        'bound_by': 'user-3',
+                        'bound_at': '2026-07-12T10:03:00+00:00',
+                    },
+                },
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    result = await config_service.get_bindings(1)
+
+    assert result['count'] == 1
+    assert result['total'] == 2
+    assert result['bindings'] == [
+        {
+            'group_id': 'group-2',
+            'member_id': 'member-2',
+            'bound_by': 'user-2',
+            'bound_at': '2026-07-12T10:02:00+00:00',
+            'member_name': 'Customer TwoIgnored',
+        }
+    ]
+    assert result['generated_at']
+
+
+@pytest.mark.asyncio
+async def test_binding_reader_handles_missing_file_and_rejects_invalid_state(config_service: IDCQueryConfigService):
+    assert (await config_service.get_bindings())['bindings'] == []
+
+    binding_path = config_service.config_path.parent / 'bindings.json'
+    binding_path.parent.mkdir(parents=True)
+    binding_path.write_text('{broken', encoding='utf-8')
+    with pytest.raises(IDCQueryBindingStateError, match='invalid'):
+        await config_service.get_bindings()
+
+    with pytest.raises(IDCQueryConfigValidationError, match='between 1 and 500'):
+        await config_service.get_bindings(501)
+
+
+@pytest.mark.asyncio
+async def test_binding_reader_rejects_oversized_state(
+    config_service: IDCQueryConfigService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(idc_query_config, 'MAX_BINDINGS_FILE_BYTES', 16)
+    binding_path = config_service.config_path.parent / 'bindings.json'
+    binding_path.parent.mkdir(parents=True)
+    binding_path.write_bytes(b'{' + b' ' * 16 + b'}')
+
+    with pytest.raises(IDCQueryBindingStateError, match='supported size'):
+        await config_service.get_bindings()

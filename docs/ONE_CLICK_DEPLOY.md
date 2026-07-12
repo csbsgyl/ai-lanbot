@@ -95,7 +95,8 @@ administrator, open **Settings > IDC Query** to configure the gateway URL,
 service token, request timeout, and TLS verification. Saved changes are loaded
 by the plugin on the next query without restarting the containers. The same
 page configures per-member query and binding-attempt limits and shows the most
-recent IDC operation outcomes.
+recent IDC operation outcomes. Its **Group bindings** tab shows a read-only,
+masked inventory of active QQ group bindings.
 
 The WebUI stores these values in `docker/data/idc-query/config.env` with
 owner-only permissions and preserves them on later one-click upgrades. The GET
@@ -112,6 +113,14 @@ member identifiers, request IDs, and duration only. Message text, verification
 codes, IP arguments, gateway tokens, and query response data are never logged.
 Audit files use owner-only permissions. The audit endpoint has the same
 user-login-only authentication boundary as credential configuration.
+
+Active bindings are stored in `docker/data/idc-query/bindings.json`. Writes are
+atomic and owner-only; each successful change refreshes
+`bindings.json.bak`, which is used only when the primary file is corrupted and
+the backup represents a committed state. Both files remain under the preserved
+`docker/data` tree during one-click and in-app upgrades. The WebUI does not
+offer a local force-delete action because bypassing the query gateway would
+leave authorization state inconsistent.
 
 The `IDC_QUERY_*` deployment variables above remain available for unattended
 first-time provisioning. Later changes can be made from the WebUI.

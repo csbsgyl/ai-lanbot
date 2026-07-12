@@ -14,7 +14,8 @@ to set the gateway URL, service token, request timeout, TLS verification, and
 per-member query/binding limits. The token is never returned by the settings
 API, and the plugin loads saved changes on the next query without a container
 restart. The **Recent activity** tab shows sanitized outcomes from the rotating
-audit log.
+audit log, while **Group bindings** provides a read-only, masked inventory for
+administrators.
 
 For unattended first-time provisioning, set these variables before running the
 deployment script:
@@ -31,6 +32,11 @@ WebUI and one-click script store the values in
 `docker/data/idc-query/config.env` with owner-only permissions, and the plugin
 reads that mounted file because the Plugin Runtime launches plugin processes
 with a clean environment.
+
+Group binding state is atomically stored in `docker/data/idc-query/bindings.json`
+with owner-only permissions. Every successful change also refreshes an
+owner-only committed backup used to recover a corrupted primary file. The
+one-click updater preserves both files with the rest of `docker/data`.
 
 Audit records never include message text, verification codes, IP arguments,
 tokens, gateway error messages, or response payloads. The local audit file is

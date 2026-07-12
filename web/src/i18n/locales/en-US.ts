@@ -1560,6 +1560,7 @@ const enUS = {
     description: 'Configure the authenticated customer query gateway',
     tabs: {
       configuration: 'Configuration',
+      bindings: 'Group bindings',
       audit: 'Recent activity',
     },
     configured: 'Gateway configured',
@@ -1593,6 +1594,18 @@ const enUS = {
     saveError: 'Failed to save IDC query settings',
     invalidTimeout: 'Timeout must be between 1 and 120 seconds',
     invalidRateLimit: 'Rate limits must be whole numbers between 1 and 1000',
+    bindings: {
+      refresh: 'Refresh bindings',
+      loading: 'Loading group bindings...',
+      loadError: 'Failed to load IDC group bindings',
+      empty: 'No groups have been bound yet',
+      generatedAt: 'Updated {{time}} · showing {{count}} of {{total}}',
+      boundAt: 'Bound at',
+      customer: 'Customer',
+      group: 'QQ group',
+      boundBy: 'Bound by',
+      unnamed: 'Unnamed member',
+    },
     audit: {
       refresh: 'Refresh activity',
       loading: 'Loading recent activity...',

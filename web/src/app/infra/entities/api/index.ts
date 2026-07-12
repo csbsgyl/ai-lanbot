@@ -420,6 +420,21 @@ export interface ApiRespIDCQueryAudit {
   generated_at: string;
 }
 
+export interface IDCQueryBinding {
+  group_id: string;
+  member_id: string;
+  bound_by: string;
+  bound_at: string;
+  member_name: string;
+}
+
+export interface ApiRespIDCQueryBindings {
+  bindings: IDCQueryBinding[];
+  count: number;
+  total: number;
+  generated_at: string;
+}
+
 export interface RagMigrationStatusResp {
   needed: boolean;
   internal_kb_count: number;

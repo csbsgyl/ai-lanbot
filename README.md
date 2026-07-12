@@ -23,6 +23,10 @@ updates from the version control in the application sidebar.
 
 The deployment script automatically detects whether GitHub and Docker image access work and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It installs the IDC query plugin automatically and reports success only after the Plugin Runtime and HTTP health checks pass. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
 
+Authenticated administrators can configure IDC credentials and limits, review
+masked active group bindings, and inspect sanitized recent query outcomes from
+the WebUI.
+
 ---
 
 <p align="center">

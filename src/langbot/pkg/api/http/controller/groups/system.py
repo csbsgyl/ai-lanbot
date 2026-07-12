@@ -108,6 +108,18 @@ class SystemRouterGroup(group.RouterGroup):
                 self.ap.logger.error(f'Failed to read IDC query audit log: {exc}')
                 return self.http_status(500, 500, 'Failed to read IDC query audit log.')
 
+        @self.route('/idc-query/bindings', methods=['GET'], auth_type=group.AuthType.USER_TOKEN)
+        async def _() -> str:
+            try:
+                raw_limit = quart.request.args.get('limit', str(idc_query_config.DEFAULT_BINDINGS_LIMIT))
+                limit = int(raw_limit)
+                return self.success(data=await self.ap.idc_query_config_service.get_bindings(limit))
+            except (TypeError, ValueError, idc_query_config.IDCQueryConfigValidationError) as exc:
+                return self.http_status(400, 400, str(exc))
+            except (OSError, UnicodeError, idc_query_config.IDCQueryBindingStateError) as exc:
+                self.ap.logger.error(f'Failed to read IDC query bindings: {exc}')
+                return self.http_status(500, 500, 'Failed to read IDC query bindings.')
+
         @self.route('/wizard/completed', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
         async def _() -> str:
             """Mark wizard status in metadata table and clear progress.
