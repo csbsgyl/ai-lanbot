@@ -214,4 +214,4 @@
 
 ### Notes
 - Real CRM, monitoring, protection, billing, and ticketing integration still requires the upstream endpoint and credential details defined by the operator; no undocumented business API was invented.
-- No repository commit or push was made as part of this task.
+- The implementation was later committed and pushed as `a984c04` after explicit user approval; a follow-up formatting-only commit addressed the full CI Ruff format check.
