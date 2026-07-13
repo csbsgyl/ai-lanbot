@@ -11,7 +11,7 @@ from quart import Quart
 import langbot_plugin.api.entities.builtin.platform.message as platform_message
 from langbot.libs.qq_official_api.api import QQOfficialClient
 from langbot.libs.qq_official_api.qqofficialevent import QQOfficialEvent
-from langbot.pkg.api.http.controller.groups.webhooks import WebhookRouterGroup
+from langbot.pkg.api.http.controller.groups.webhooks import QQWebhookRouterGroup, WebhookRouterGroup
 from langbot.pkg.platform.sources.qqofficial import QQOfficialEventConverter
 
 
@@ -299,6 +299,70 @@ async def test_qq_webhook_is_reachable_through_per_bot_http_route():
         '/bots/test-bot-uuid',
         data=body,
         headers={**signed_headers, 'Content-Type': 'application/json'},
+    )
+    await asyncio.sleep(0)
+
+    assert response.status_code == 200
+    assert await response.get_json() == {'op': 12}
+    qq_client._handle_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_is_reachable_through_stable_callback_route():
+    body = json.dumps(
+        {
+            'op': 0,
+            't': 'GROUP_AT_MESSAGE_CREATE',
+            'd': {
+                'id': 'message-2',
+                'content': '查IP 1.1.1.1',
+                'group_openid': 'group-openid',
+                'author': {'member_openid': 'member-openid'},
+            },
+        },
+        separators=(',', ':'),
+    ).encode()
+    qq_client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    qq_client._handle_message = AsyncMock()
+
+    async def handle_unified_webhook(*, bot_uuid, path, request):
+        assert bot_uuid == 'test-bot-uuid'
+        assert path == ''
+        return await qq_client.handle_unified_webhook(request)
+
+    adapter = SimpleNamespace(
+        bot=SimpleNamespace(app_id='test-app'),
+        enable_webhook=True,
+        handle_unified_webhook=handle_unified_webhook,
+    )
+    runtime_bot = SimpleNamespace(
+        enable=True,
+        adapter=adapter,
+        bot_entity=SimpleNamespace(uuid='test-bot-uuid', adapter='qqofficial'),
+    )
+    application = SimpleNamespace(
+        platform_mgr=SimpleNamespace(bots=[runtime_bot]),
+        logger=_logger(),
+    )
+    quart_app = Quart(__name__)
+    router = QQWebhookRouterGroup(application, quart_app)
+    await router.initialize()
+    signed_headers = _signed_request(body, 'test-secret').headers
+
+    response = await quart_app.test_client().post(
+        '/qq/callback',
+        data=body,
+        headers={
+            **signed_headers,
+            'Content-Type': 'application/json',
+            'X-Bot-Appid': 'test-app',
+        },
     )
     await asyncio.sleep(0)
 

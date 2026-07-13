@@ -70,18 +70,22 @@ upstream. When the reverse proxy runs elsewhere, use
 `http://<server-ip>:5300` and restrict that port to the proxy server in the
 host firewall or cloud security group.
 
-Each bot receives its own callback route after it is created:
+The QQ Official adapter exposes a stable callback route:
 
 ```text
-/bots/<bot-uuid>
+/qq/callback
 ```
 
 Keep this path unchanged in the reverse proxy. The URL entered in the QQ
 Open Platform must therefore be an externally reachable HTTPS URL such as:
 
 ```text
-https://bot.example.com/bots/<bot-uuid>
+https://bot.example.com/qq/callback
 ```
+
+The route selects the enabled QQ Official bot by QQ's `X-Bot-Appid` request
+header. The existing `/bots/<bot-uuid>` route remains available for backward
+compatibility and for other webhook adapters.
 
 QQ currently permits callback ports `80`, `443`, `8080`, and `8443`; HTTPS is
 required. The bundled QQ Official adapter handles the `op=13` callback

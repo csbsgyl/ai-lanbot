@@ -52,3 +52,45 @@ class WebhookRouterGroup(group.RouterGroup):
         except Exception as e:
             self.ap.logger.error(f'Webhook dispatch error for bot {bot_uuid}: {traceback.format_exc()}')
             return quart.jsonify({'error': str(e)}), 500
+
+
+@group.group_class('qq_webhook', '/qq')
+class QQWebhookRouterGroup(group.RouterGroup):
+    async def initialize(self) -> None:
+        @self.route('/callback', methods=['GET', 'POST'], auth_type=group.AuthType.NONE)
+        async def handle_qq_webhook():
+            """Dispatch the stable QQ callback URL to the matching bot."""
+            return await self._dispatch_qq_webhook()
+
+    async def _dispatch_qq_webhook(self):
+        try:
+            app_id = quart.request.headers.get('X-Bot-Appid', '').strip()
+            candidates = [
+                bot
+                for bot in getattr(self.ap.platform_mgr, 'bots', [])
+                if getattr(bot, 'enable', False)
+                and getattr(getattr(bot, 'bot_entity', None), 'adapter', '') == 'qqofficial'
+                and getattr(getattr(bot, 'adapter', None), 'enable_webhook', False)
+            ]
+
+            if app_id:
+                candidates = [
+                    bot
+                    for bot in candidates
+                    if str(getattr(getattr(getattr(bot, 'adapter', None), 'bot', None), 'app_id', '')) == app_id
+                ]
+
+            if not candidates:
+                return quart.jsonify({'error': 'Enabled QQ Official webhook bot not found'}), 404
+            if len(candidates) > 1:
+                return quart.jsonify({'error': 'Multiple QQ Official webhook bots match this callback'}), 409
+
+            runtime_bot = candidates[0]
+            return await runtime_bot.adapter.handle_unified_webhook(
+                bot_uuid=str(runtime_bot.bot_entity.uuid),
+                path='',
+                request=quart.request,
+            )
+        except Exception as e:
+            self.ap.logger.error(f'QQ webhook dispatch error: {traceback.format_exc()}')
+            return quart.jsonify({'error': str(e)}), 500

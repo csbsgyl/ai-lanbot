@@ -237,6 +237,26 @@ class TestBotServiceGetRuntimeBotInfo:
         assert result['adapter_runtime_values']['webhook_url'] == '/bots/wecom-uuid'
         assert result['adapter_runtime_values']['webhook_full_url'] == 'http://127.0.0.1:5300/bots/wecom-uuid'
 
+    async def test_get_runtime_bot_info_returns_stable_webhook_for_qqofficial(self):
+        ap = SimpleNamespace()
+        ap.instance_config = SimpleNamespace(
+            data={'api': {'webhook_prefix': 'http://127.0.0.1:5300', 'extra_webhook_prefix': ''}}
+        )
+        ap.platform_mgr = SimpleNamespace(get_bot_by_uuid=AsyncMock(return_value=None))
+        bot_data = {
+            'uuid': 'qq-uuid',
+            'name': 'QQ Bot',
+            'adapter': 'qqofficial',
+            'adapter_config': {'appid': 'test-app'},
+        }
+        service = BotService(ap)
+        service.get_bot = AsyncMock(return_value=bot_data)
+
+        result = await service.get_runtime_bot_info('qq-uuid')
+
+        assert result['adapter_runtime_values']['webhook_url'] == '/qq/callback'
+        assert result['adapter_runtime_values']['webhook_full_url'] == 'http://127.0.0.1:5300/qq/callback'
+
     async def test_get_runtime_bot_info_no_webhook_for_telegram(self):
         """Returns no webhook URL for non-webhook adapters like telegram."""
         # Setup

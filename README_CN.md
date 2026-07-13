@@ -18,7 +18,7 @@ tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githu
 脚本只部署正式环境，默认安装到 `/opt/ai-lanbot` 并使用端口 `5300`。
 首次部署完成后，管理员可以点击程序侧栏版本旁的更新按钮，直接检查并安装后续更新。
 部署完成时会打印 QQ 回调反代上游；同机反代使用 `http://127.0.0.1:5300`，
-最终填写到 QQ 开放平台的地址为 `https://你的域名/bots/<机器人UUID>`。
+最终填写到 QQ 开放平台的地址为 `https://你的域名/qq/callback`。
 
 部署脚本会自动检测 GitHub 和 Docker 镜像访问是否可用；需要时会自动使用 `https://github.xiaohangyun.org` 和 `https://docker.xiaohangyun.org`。脚本会自动安装 IDC 查询插件，并且只有在插件运行时和 HTTP 健康检查通过后才会提示部署成功。全新部署没有默认账号密码，首次打开 `/register` 创建管理员账号。更多说明见 [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md)。
 

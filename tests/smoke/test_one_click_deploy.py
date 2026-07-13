@@ -171,8 +171,8 @@ def test_deployment_prints_qq_callback_reverse_proxy_details():
 
     assert 'QQ callback upstream (reverse proxy on this server): ${local_url}' in script
     assert 'QQ callback upstream (reverse proxy on another server): ${remote_url}' in script
-    assert 'QQ callback route: /bots/<bot-uuid>' in script
-    assert 'https://<your-domain>/bots/<bot-uuid>' in script
+    assert 'QQ callback upstream: ${local_url}/qq/callback' in script
+    assert 'https://<your-domain>/qq/callback' in script
 
 
 def test_systemd_updater_rejects_unsafe_install_paths():

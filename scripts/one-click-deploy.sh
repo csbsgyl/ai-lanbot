@@ -725,8 +725,8 @@ print_success_info() {
   log "Remote URL: ${remote_url}"
   log "QQ callback upstream (reverse proxy on this server): ${local_url}"
   log "QQ callback upstream (reverse proxy on another server): ${remote_url}"
-  log "QQ callback route: /bots/<bot-uuid>"
-  log "QQ platform callback after HTTPS proxy: https://<your-domain>/bots/<bot-uuid>"
+  log "QQ callback upstream: ${local_url}/qq/callback"
+  log "QQ platform callback after HTTPS proxy: https://<your-domain>/qq/callback"
 
   if is_initialized "$local_url"; then
     log "Admin account: already initialized."
