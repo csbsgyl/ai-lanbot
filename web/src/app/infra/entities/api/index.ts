@@ -418,6 +418,41 @@ export interface TestIDCQueryConnection {
   verify_tls?: boolean;
 }
 
+export type QQOfficialCallbackStatus =
+  'ready' | 'not_configured' | 'disabled' | 'websocket_mode' | 'conflict';
+
+export interface QQOfficialWebhookMetrics {
+  started_at: string;
+  requests_total: number;
+  validations_total: number;
+  events_total: number;
+  duplicates_total: number;
+  rejected_total: number;
+  last_request_at: string | null;
+  last_valid_at: string | null;
+  last_event_at: string | null;
+  last_rejected_at: string | null;
+}
+
+export interface QQOfficialBotStatus {
+  uuid: string;
+  name: string;
+  app_id: string;
+  enabled: boolean;
+  mode: 'webhook' | 'websocket';
+  metrics: QQOfficialWebhookMetrics | null;
+}
+
+export interface ApiRespQQOfficialStatus {
+  status: QQOfficialCallbackStatus;
+  callback_path: string;
+  configured_callback_url: string;
+  configured_bots: number;
+  active_webhook_bots: number;
+  bots: QQOfficialBotStatus[];
+  generated_at: string;
+}
+
 export interface IDCQueryAuditEvent {
   timestamp: string;
   command: string;

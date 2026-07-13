@@ -86,6 +86,18 @@ async def idc_config_route_client():
             'generated_at': '2026-07-12T10:00:01+00:00',
         }
     )
+    app.qqofficial_status_service = Mock()
+    app.qqofficial_status_service.get_status = AsyncMock(
+        return_value={
+            'status': 'ready',
+            'callback_path': '/qq/callback',
+            'configured_callback_url': 'https://bot.example.com/qq/callback',
+            'configured_bots': 1,
+            'active_webhook_bots': 1,
+            'bots': [],
+            'generated_at': '2026-07-13T10:05:00+00:00',
+        }
+    )
 
     quart_app = quart.Quart(__name__)
     router = SystemRouterGroup(app, quart_app)
@@ -102,12 +114,14 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     audit_response = await client.get('/api/v1/system/idc-query/audit')
     bindings_response = await client.get('/api/v1/system/idc-query/bindings')
     test_response = await client.post('/api/v1/system/idc-query/test', json={})
+    qq_status_response = await client.get('/api/v1/system/qqofficial/status')
 
     assert get_response.status_code == 401
     assert put_response.status_code == 401
     assert audit_response.status_code == 401
     assert bindings_response.status_code == 401
     assert test_response.status_code == 401
+    assert qq_status_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -144,6 +158,13 @@ async def test_idc_config_routes_reject_api_key_authentication(idc_config_route_
     )
     assert test_response.status_code == 401
     app.idc_query_config_service.test_connection.assert_not_awaited()
+
+    qq_status_response = await client.get(
+        '/api/v1/system/qqofficial/status',
+        headers={'X-API-Key': 'automation-key'},
+    )
+    assert qq_status_response.status_code == 401
+    app.qqofficial_status_service.get_status.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -193,6 +214,39 @@ async def test_idc_connection_test_uses_user_login_and_returns_sanitized_result(
     assert 'token' not in response_data
     assert 'base_url' not in response_data
     app.idc_query_config_service.test_connection.assert_awaited_once_with(payload)
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_status_uses_user_login_and_returns_runtime_state(idc_config_route_client):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/qqofficial/status',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 200
+    response_data = (await response.get_json())['data']
+    assert response_data['status'] == 'ready'
+    assert response_data['callback_path'] == '/qq/callback'
+    app.qqofficial_status_service.get_status.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_status_does_not_expose_runtime_errors(idc_config_route_client):
+    client, app = idc_config_route_client
+    app.qqofficial_status_service.get_status.side_effect = RuntimeError('QQ secret loaded from /private/runtime/config')
+
+    response = await client.get(
+        '/api/v1/system/qqofficial/status',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 500
+    assert (await response.get_json())['msg'] == 'Failed to read QQ Official callback status.'
+    response_text = await response.get_data(as_text=True)
+    assert 'QQ secret' not in response_text
+    assert '/private/runtime' not in response_text
 
 
 @pytest.mark.asyncio

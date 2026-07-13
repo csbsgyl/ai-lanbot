@@ -151,9 +151,7 @@ async def test_text_message_without_attachment_does_not_download_image(monkeypat
 
 @pytest.mark.asyncio
 async def test_group_message_removes_bot_mention_from_plain_text():
-    converted = await QQOfficialEventConverter.target2yiri(
-        _group_event(content='<@!123456789>  查IP 1.1.1.1')
-    )
+    converted = await QQOfficialEventConverter.target2yiri(_group_event(content='<@!123456789>  查IP 1.1.1.1'))
     plain_parts = [item.text for item in converted.message_chain if isinstance(item, platform_message.Plain)]
 
     assert plain_parts == ['查IP 1.1.1.1']
@@ -179,8 +177,9 @@ def test_qqofficial_defaults_to_webhook_and_does_not_require_legacy_token():
 @pytest.mark.asyncio
 async def test_qq_webhook_validation_returns_secret_signature():
     secret = 'test-secret'
+    event_ts = str(int(time.time()))
     body = json.dumps(
-        {'op': 13, 'd': {'plain_token': 'plain-token', 'event_ts': '1725442341'}},
+        {'op': 13, 'd': {'plain_token': 'plain-token', 'event_ts': event_ts}},
         separators=(',', ':'),
     ).encode()
     request = SimpleNamespace(
@@ -199,10 +198,78 @@ async def test_qq_webhook_validation_returns_secret_signature():
 
     assert status == 200
     assert response['plain_token'] == 'plain-token'
+    metrics = client.get_webhook_status()
+    assert metrics['requests_total'] == 1
+    assert metrics['validations_total'] == 1
+    assert metrics['rejected_total'] == 0
+    assert metrics['last_valid_at'] is not None
     ed25519.Ed25519PrivateKey.from_private_bytes(_qq_secret_seed(secret)).public_key().verify(
         bytes.fromhex(response['signature']),
-        b'1725442341plain-token',
+        f'{event_ts}plain-token'.encode(),
     )
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_rejects_mismatching_app_id():
+    event_ts = str(int(time.time()))
+    body = json.dumps(
+        {'op': 13, 'd': {'plain_token': 'plain-token', 'event_ts': event_ts}},
+        separators=(',', ':'),
+    ).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    wrong_header_response = await client.handle_unified_webhook(
+        SimpleNamespace(
+            headers={'X-Bot-Appid': 'different-app'},
+            get_data=AsyncMock(return_value=body),
+        )
+    )
+
+    assert wrong_header_response == ({'error': 'invalid bot app id'}, 401)
+    assert client.get_webhook_status()['validations_total'] == 0
+    assert client.get_webhook_status()['rejected_total'] == 1
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_blocks_stale_and_json_signing_challenges():
+    current_timestamp = str(int(time.time()))
+    stale_timestamp = str(int(time.time()) - QQOfficialClient.CALLBACK_SIGNATURE_MAX_AGE_SECONDS - 1)
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    stale_body = json.dumps({'op': 13, 'd': {'plain_token': 'plain-token', 'event_ts': stale_timestamp}}).encode()
+    signing_oracle_body = json.dumps(
+        {
+            'op': 13,
+            'd': {
+                'plain_token': '{"op":0,"d":{}}',
+                'event_ts': current_timestamp,
+            },
+        }
+    ).encode()
+
+    stale_response = await client.handle_unified_webhook(
+        SimpleNamespace(headers={}, get_data=AsyncMock(return_value=stale_body))
+    )
+    oracle_response = await client.handle_unified_webhook(
+        SimpleNamespace(headers={}, get_data=AsyncMock(return_value=signing_oracle_body))
+    )
+
+    assert stale_response == ({'error': 'invalid callback validation payload'}, 400)
+    assert oracle_response == ({'error': 'invalid callback validation payload'}, 400)
+    assert client.get_webhook_status()['validations_total'] == 0
+    assert client.get_webhook_status()['rejected_total'] == 2
 
 
 @pytest.mark.asyncio
@@ -221,6 +288,7 @@ async def test_qq_webhook_rejects_unsigned_event():
 
     assert status == 401
     assert response == {'error': 'invalid callback signature'}
+    assert client.get_webhook_status()['rejected_total'] == 1
 
 
 @pytest.mark.asyncio
@@ -235,9 +303,7 @@ async def test_qq_webhook_rejects_stale_signed_event():
     )
     stale_timestamp = str(int(time.time()) - client.CALLBACK_SIGNATURE_MAX_AGE_SECONDS - 1)
 
-    response, status = await client.handle_unified_webhook(
-        _signed_request(body, 'test-secret', stale_timestamp)
-    )
+    response, status = await client.handle_unified_webhook(_signed_request(body, 'test-secret', stale_timestamp))
 
     assert status == 401
     assert response == {'error': 'invalid callback signature'}
@@ -307,6 +373,55 @@ async def test_qq_webhook_acknowledges_duplicate_event_without_dispatching_twice
     assert first_response == ({'op': 12}, 200)
     assert second_response == ({'op': 12}, 200)
     client._handle_message.assert_awaited_once()
+    metrics = client.get_webhook_status()
+    assert metrics['requests_total'] == 2
+    assert metrics['events_total'] == 1
+    assert metrics['duplicates_total'] == 1
+    assert metrics['last_event_at'] is not None
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_rejects_oversized_body_before_reading_it():
+    request = SimpleNamespace(
+        headers={},
+        content_length=QQOfficialClient.CALLBACK_MAX_BODY_BYTES + 1,
+        get_data=AsyncMock(),
+    )
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    response, status = await client.handle_unified_webhook(request)
+
+    assert status == 413
+    assert response == {'error': 'callback payload too large'}
+    request.get_data.assert_not_awaited()
+    metrics = client.get_webhook_status()
+    assert metrics['requests_total'] == 1
+    assert metrics['rejected_total'] == 1
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_returns_generic_error_for_invalid_json():
+    request = SimpleNamespace(headers={}, get_data=AsyncMock(return_value=b'{private-invalid-json'))
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    response, status = await client.handle_unified_webhook(request)
+
+    assert status == 400
+    assert response == {'error': 'invalid callback payload'}
+    assert 'private-invalid-json' not in json.dumps(response)
+    assert client.get_webhook_status()['rejected_total'] == 1
 
 
 def test_qq_webhook_dedup_window_expires_and_remains_time_ordered(monkeypatch):

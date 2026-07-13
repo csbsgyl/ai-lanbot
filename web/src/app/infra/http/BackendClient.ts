@@ -21,6 +21,7 @@ import {
   ApiRespSystemUpdate,
   ApiRespIDCQueryConfig,
   ApiRespIDCQueryConnectionTest,
+  ApiRespQQOfficialStatus,
   ApiRespIDCQueryAudit,
   ApiRespIDCQueryBindings,
   TestIDCQueryConnection,
@@ -1031,6 +1032,10 @@ export class BackendClient extends BaseHttpClient {
     config: TestIDCQueryConnection,
   ): Promise<ApiRespIDCQueryConnectionTest> {
     return this.post('/api/v1/system/idc-query/test', config);
+  }
+
+  public getQQOfficialStatus(): Promise<ApiRespQQOfficialStatus> {
+    return this.get('/api/v1/system/qqofficial/status');
   }
 
   public getIDCQueryAudit(limit: number = 100): Promise<ApiRespIDCQueryAudit> {

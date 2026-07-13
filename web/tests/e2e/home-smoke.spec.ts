@@ -157,6 +157,15 @@ test.describe('authenticated app shell', () => {
     ).toBeVisible();
     await expect(dialog.getByText('Gateway not configured')).toBeVisible();
 
+    await dialog.getByRole('tab', { name: 'QQ callback' }).click();
+    await expect(dialog.getByText('Ready', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('IDC QQ Bot')).toBeVisible();
+    await expect(
+      dialog.getByRole('textbox', { name: 'Callback URL' }),
+    ).toHaveValue(`${new URL(page.url()).origin}/qq/callback`);
+    await expect(dialog.getByText('1029384756')).toBeVisible();
+    await dialog.getByRole('tab', { name: 'Configuration' }).click();
+
     await dialog
       .getByLabel('Gateway URL')
       .fill('https://query.example.com/api/');
@@ -230,6 +239,12 @@ test.describe('authenticated app shell', () => {
     await expect(dialog.getByLabel('Request timeout')).toBeVisible();
     await expect(dialog.getByLabel('Service token')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Save' })).toBeVisible();
+
+    await dialog.getByRole('tab', { name: 'QQ callback' }).click();
+    await expect(
+      dialog.getByRole('textbox', { name: 'Callback URL' }),
+    ).toBeVisible();
+    await expect(dialog.getByText('IDC QQ Bot')).toBeVisible();
 
     await dialog.getByRole('tab', { name: 'Group bindings' }).click();
     await expect(dialog.getByText('Example IDC Customer')).toBeVisible();

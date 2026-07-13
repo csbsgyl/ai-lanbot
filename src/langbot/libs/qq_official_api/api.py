@@ -2,6 +2,7 @@ import re
 import time
 import asyncio
 from collections import OrderedDict
+from datetime import datetime, timezone
 from quart import request
 import httpx
 from quart import Quart
@@ -15,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 
 class QQOfficialClient:
+    CALLBACK_MAX_BODY_BYTES = 1024 * 1024
     CALLBACK_SIGNATURE_MAX_AGE_SECONDS = 300
     CALLBACK_DEDUP_TTL_SECONDS = 600
     CALLBACK_DEDUP_MAX_EVENTS = 4096
@@ -44,6 +46,18 @@ class QQOfficialClient:
         self._token_refresh_task: Optional[asyncio.Task] = None
         self._webhook_tasks: set[asyncio.Task] = set()
         self._seen_webhook_events: OrderedDict[str, float] = OrderedDict()
+        self._webhook_metrics: dict[str, int | str | None] = {
+            'started_at': self._utc_now(),
+            'requests_total': 0,
+            'validations_total': 0,
+            'events_total': 0,
+            'duplicates_total': 0,
+            'rejected_total': 0,
+            'last_request_at': None,
+            'last_valid_at': None,
+            'last_event_at': None,
+            'last_rejected_at': None,
+        }
 
     async def check_access_token(self):
         """检查access_token是否存在"""
@@ -97,32 +111,69 @@ class QQOfficialClient:
             req: Quart Request 对象
         """
         try:
+            self._record_webhook_metric('requests_total', 'last_request_at')
+            content_length = getattr(req, 'content_length', None)
+            if isinstance(content_length, int) and content_length > self.CALLBACK_MAX_BODY_BYTES:
+                self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                return {'error': 'callback payload too large'}, 413
+
             body = await req.get_data()
 
             await self.logger.info(f'Received request, body length: {len(body)}')
+
+            if len(body) > self.CALLBACK_MAX_BODY_BYTES:
+                self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                return {'error': 'callback payload too large'}, 413
 
             if not body or len(body) == 0:
                 await self.logger.info('Received empty body, might be health check or GET request')
                 return {'code': 0, 'message': 'ok'}, 200
 
             payload = json.loads(body)
+            if not isinstance(payload, dict):
+                self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                return {'error': 'invalid callback payload'}, 400
 
             if payload.get('op') == 13:
                 callback_app_id = req.headers.get('X-Bot-Appid', '')
                 if callback_app_id and callback_app_id != self.app_id:
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
                     return {'error': 'invalid bot app id'}, 401
                 validation_data = payload.get('d')
-                if not validation_data:
+                if not isinstance(validation_data, dict) or not validation_data:
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
                     return {'error': "missing 'd' field"}, 400
+                event_ts = validation_data.get('event_ts')
+                plain_token = validation_data.get('plain_token')
+                if (
+                    not isinstance(event_ts, str)
+                    or not re.fullmatch(r'\d{10,13}', event_ts)
+                    or not isinstance(plain_token, str)
+                    or not plain_token
+                    or len(plain_token) > 256
+                    or any(ord(character) < 32 or character in '{}[]"\\' for character in plain_token)
+                ):
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                    return {'error': 'invalid callback validation payload'}, 400
+                validation_timestamp = int(event_ts)
+                if len(event_ts) == 13:
+                    validation_timestamp /= 1000
+                if abs(time.time() - validation_timestamp) > self.CALLBACK_SIGNATURE_MAX_AGE_SECONDS:
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                    return {'error': 'invalid callback validation payload'}, 400
                 response = await self.verify(validation_data)
+                self._record_webhook_metric('validations_total', 'last_valid_at')
                 return response, 200
 
             if not await self.verify_callback_signature(req.headers, body):
+                self._record_webhook_metric('rejected_total', 'last_rejected_at')
                 await self.logger.warning('Rejected QQ Official webhook with an invalid signature')
                 return {'error': 'invalid callback signature'}, 401
 
+            self._webhook_metrics['last_valid_at'] = self._utc_now()
             if payload.get('op') == 0:
                 if self._is_duplicate_webhook_event(payload):
+                    self._record_webhook_metric('duplicates_total')
                     await self.logger.info('Ignored duplicate QQ Official webhook event')
                     return {'op': 12}, 200
                 message_data = await self.get_message(payload)
@@ -131,13 +182,33 @@ class QQOfficialClient:
                     task = asyncio.create_task(self._dispatch_webhook_event(event))
                     self._webhook_tasks.add(task)
                     task.add_done_callback(self._webhook_tasks.discard)
+                self._record_webhook_metric('events_total', 'last_event_at')
                 return {'op': 12}, 200
 
             return {'code': 0, 'message': 'success'}
 
-        except Exception as e:
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._record_webhook_metric('rejected_total', 'last_rejected_at')
+            await self.logger.warning('Rejected QQ Official webhook with invalid JSON')
+            return {'error': 'invalid callback payload'}, 400
+        except Exception:
+            self._record_webhook_metric('rejected_total', 'last_rejected_at')
             await self.logger.error(f'Error in handle_callback_request: {traceback.format_exc()}')
-            return {'error': str(e)}, 400
+            return {'error': 'callback request failed'}, 400
+
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _record_webhook_metric(self, counter: str, timestamp: str | None = None) -> None:
+        current = self._webhook_metrics.get(counter, 0)
+        self._webhook_metrics[counter] = min(int(current or 0) + 1, 2**53 - 1)
+        if timestamp:
+            self._webhook_metrics[timestamp] = self._utc_now()
+
+    def get_webhook_status(self) -> dict[str, int | str | None]:
+        """Return content-free callback diagnostics for authenticated operators."""
+        return dict(self._webhook_metrics)
 
     async def _dispatch_webhook_event(self, event: QQOfficialEvent):
         """Dispatch an event after acknowledging the QQ callback immediately."""

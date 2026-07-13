@@ -131,6 +131,14 @@ class SystemRouterGroup(group.RouterGroup):
                 self.ap.logger.error(f'Failed to read IDC query bindings: {exc}')
                 return self.http_status(500, 500, 'Failed to read IDC query bindings.')
 
+        @self.route('/qqofficial/status', methods=['GET'], auth_type=group.AuthType.USER_TOKEN)
+        async def _() -> str:
+            try:
+                return self.success(data=await self.ap.qqofficial_status_service.get_status())
+            except Exception:
+                self.ap.logger.exception('Failed to read QQ Official callback status')
+                return self.http_status(500, 500, 'Failed to read QQ Official callback status.')
+
         @self.route('/wizard/completed', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
         async def _() -> str:
             """Mark wizard status in metadata table and clear progress.

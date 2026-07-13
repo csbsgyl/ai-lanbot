@@ -516,6 +516,38 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     });
   }
 
+  if (path === '/api/v1/system/qqofficial/status') {
+    return fulfillJson(route, {
+      status: 'ready',
+      callback_path: '/qq/callback',
+      configured_callback_url: 'http://127.0.0.1:5300/qq/callback',
+      configured_bots: 1,
+      active_webhook_bots: 1,
+      bots: [
+        {
+          uuid: 'qqofficial-bot-1',
+          name: 'IDC QQ Bot',
+          app_id: '1029384756',
+          enabled: true,
+          mode: 'webhook',
+          metrics: {
+            started_at: '2026-07-13T10:00:00+00:00',
+            requests_total: 9,
+            validations_total: 1,
+            events_total: 6,
+            duplicates_total: 1,
+            rejected_total: 1,
+            last_request_at: '2026-07-13T10:05:00+00:00',
+            last_valid_at: '2026-07-13T10:05:00+00:00',
+            last_event_at: '2026-07-13T10:05:00+00:00',
+            last_rejected_at: '2026-07-13T10:01:00+00:00',
+          },
+        },
+      ],
+      generated_at: '2026-07-13T10:05:00+00:00',
+    });
+  }
+
   if (path === '/api/v1/system/idc-query/audit') {
     return fulfillJson(route, {
       events: state.idcQueryAuditEvents,

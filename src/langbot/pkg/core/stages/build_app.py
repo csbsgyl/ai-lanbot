@@ -33,6 +33,7 @@ from ...api.http.service import skill as skill_service
 from ...skill import manager as skill_mgr
 from ...api.http.service import maintenance as maintenance_service
 from ...api.http.service import idc_query_config as idc_query_config_service
+from ...api.http.service import qqofficial_status as qqofficial_status_service
 from ...api.http.service import system_update as system_update_service
 from ...discover import engine as discover_engine
 from ...storage import mgr as storagemgr
@@ -183,6 +184,9 @@ class BuildAppStage(stage.BootingStage):
 
         idc_query_config_service_inst = idc_query_config_service.IDCQueryConfigService(ap)
         ap.idc_query_config_service = idc_query_config_service_inst
+
+        qqofficial_status_service_inst = qqofficial_status_service.QQOfficialStatusService(ap)
+        ap.qqofficial_status_service = qqofficial_status_service_inst
 
         http_ctrl = http_controller.HTTPController(ap)
         await http_ctrl.initialize()

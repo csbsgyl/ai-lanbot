@@ -9,6 +9,7 @@ import {
   Link2,
   Loader2,
   RefreshCw,
+  RadioTower,
   RotateCcw,
   Save,
   Settings2,
@@ -24,6 +25,7 @@ import { backendClient } from '@/app/infra/http';
 import type {
   ApiRespIDCQueryConfig,
   ApiRespIDCQueryConnectionTest,
+  ApiRespQQOfficialStatus,
   IDCQueryAuditEvent,
   IDCQueryBinding,
 } from '@/app/infra/entities/api';
@@ -33,6 +35,7 @@ import {
 } from '@/app/home/components/settings-dialog/panel-layout';
 import IDCQueryAuditTable from './IDCQueryAuditTable';
 import IDCQueryBindingTable from './IDCQueryBindingTable';
+import QQCallbackStatusPanel from './QQCallbackStatusPanel';
 
 interface IDCQuerySettingsPanelProps {
   active: boolean;
@@ -77,6 +80,11 @@ export default function IDCQuerySettingsPanel({
   const [bindingsGeneratedAt, setBindingsGeneratedAt] = useState('');
   const [bindingsLoading, setBindingsLoading] = useState(false);
   const [bindingsError, setBindingsError] = useState('');
+  const [qqStatus, setQQStatus] = useState<ApiRespQQOfficialStatus | null>(
+    null,
+  );
+  const [qqStatusLoading, setQQStatusLoading] = useState(false);
+  const [qqStatusError, setQQStatusError] = useState('');
 
   const invalidateConnectionResult = useCallback(() => {
     connectionTestSequence.current += 1;
@@ -142,6 +150,18 @@ export default function IDCQuerySettingsPanel({
     }
   }, []);
 
+  const loadQQStatus = useCallback(async () => {
+    setQQStatusLoading(true);
+    setQQStatusError('');
+    try {
+      setQQStatus(await backendClient.getQQOfficialStatus());
+    } catch (loadError) {
+      setQQStatusError(getErrorMessage(loadError));
+    } finally {
+      setQQStatusLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (active) loadConfig();
   }, [active, loadConfig]);
@@ -153,6 +173,10 @@ export default function IDCQuerySettingsPanel({
   useEffect(() => {
     if (active && activeTab === 'bindings') loadBindings();
   }, [active, activeTab, loadBindings]);
+
+  useEffect(() => {
+    if (active && activeTab === 'callback') loadQQStatus();
+  }, [active, activeTab, loadQQStatus]);
 
   const saveConfig = async () => {
     const parsedTimeout = Number(timeoutSeconds);
@@ -269,6 +293,16 @@ export default function IDCQuerySettingsPanel({
             </span>
           </TabsTrigger>
           <TabsTrigger
+            value="callback"
+            aria-label={t('idcQuery.tabs.callback')}
+            title={t('idcQuery.tabs.callback')}
+          >
+            <RadioTower />
+            <span className="hidden sm:inline">
+              {t('idcQuery.tabs.callback')}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger
             value="bindings"
             aria-label={t('idcQuery.tabs.bindings')}
             title={t('idcQuery.tabs.bindings')}
@@ -342,22 +376,44 @@ export default function IDCQuerySettingsPanel({
             type="button"
             variant="outline"
             size="icon"
-            onClick={activeTab === 'bindings' ? loadBindings : loadAudit}
-            disabled={activeTab === 'bindings' ? bindingsLoading : auditLoading}
+            onClick={
+              activeTab === 'callback'
+                ? loadQQStatus
+                : activeTab === 'bindings'
+                  ? loadBindings
+                  : loadAudit
+            }
+            disabled={
+              activeTab === 'callback'
+                ? qqStatusLoading
+                : activeTab === 'bindings'
+                  ? bindingsLoading
+                  : auditLoading
+            }
             aria-label={t(
-              activeTab === 'bindings'
-                ? 'idcQuery.bindings.refresh'
-                : 'idcQuery.audit.refresh',
+              activeTab === 'callback'
+                ? 'idcQuery.callback.refresh'
+                : activeTab === 'bindings'
+                  ? 'idcQuery.bindings.refresh'
+                  : 'idcQuery.audit.refresh',
             )}
             title={t(
-              activeTab === 'bindings'
-                ? 'idcQuery.bindings.refresh'
-                : 'idcQuery.audit.refresh',
+              activeTab === 'callback'
+                ? 'idcQuery.callback.refresh'
+                : activeTab === 'bindings'
+                  ? 'idcQuery.bindings.refresh'
+                  : 'idcQuery.audit.refresh',
             )}
           >
             <RefreshCw
               className={
-                (activeTab === 'bindings' ? bindingsLoading : auditLoading)
+                (
+                  activeTab === 'callback'
+                    ? qqStatusLoading
+                    : activeTab === 'bindings'
+                      ? bindingsLoading
+                      : auditLoading
+                )
                   ? 'animate-spin'
                   : ''
               }
@@ -608,6 +664,18 @@ export default function IDCQuerySettingsPanel({
             </form>
           )}
         </PanelBody>
+      </TabsContent>
+
+      <TabsContent
+        value="callback"
+        className="mt-0 min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+      >
+        <QQCallbackStatusPanel
+          status={qqStatus}
+          loading={qqStatusLoading}
+          error={qqStatusError}
+          onRetry={loadQQStatus}
+        />
       </TabsContent>
 
       <TabsContent

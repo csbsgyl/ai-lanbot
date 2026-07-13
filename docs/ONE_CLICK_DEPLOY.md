@@ -89,11 +89,20 @@ compatibility and for other webhook adapters.
 
 QQ currently permits callback ports `80`, `443`, `8080`, and `8443`; HTTPS is
 required. The bundled QQ Official adapter handles the `op=13` callback
-validation, verifies signed event callbacks, and acknowledges accepted events
+validation with a bounded challenge timestamp, verifies signed event callbacks,
+and acknowledges accepted events
 with `op=12`. Signed callbacks outside the accepted time window are rejected,
 and recently seen event IDs are acknowledged without being processed twice.
 New QQ Official bots default to Webhook mode. WebSocket mode remains available
 as an explicit adapter setting.
+
+After signing in, open **Settings > IDC Query > QQ callback** to copy the
+callback URL for the domain currently serving the WebUI and inspect runtime
+readiness. The page distinguishes disabled, WebSocket, ready, and App ID
+conflict states and shows content-free callback counters. It never exposes App
+Secrets, query tokens, messages, QQ group IDs, or member IDs. The diagnostics
+API requires a user login token and rejects API-key and MCP authentication.
+Counters are in-memory operational data and reset when the QQ bot restarts.
 
 ## Optional Environment Variables
 
