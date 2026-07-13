@@ -166,6 +166,15 @@ def test_host_updater_is_fixed_to_the_managed_deployment():
     assert 'LANBOT_COMPOSE_PROFILES' in host_script
 
 
+def test_deployment_prints_qq_callback_reverse_proxy_details():
+    script = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+
+    assert 'QQ callback upstream (reverse proxy on this server): ${local_url}' in script
+    assert 'QQ callback upstream (reverse proxy on another server): ${remote_url}' in script
+    assert 'QQ callback route: /bots/<bot-uuid>' in script
+    assert 'https://<your-domain>/bots/<bot-uuid>' in script
+
+
 def test_systemd_updater_rejects_unsafe_install_paths():
     if BASH is None:
         pytest.skip('bash is required to exercise the Linux deployment script')

@@ -53,7 +53,7 @@ spec:
         zh_Hans: 令牌
         zh_Hant: 令牌
       type: string
-      required: true
+      required: false
       default: ""
     - name: enable-webhook
       label:
@@ -66,7 +66,7 @@ spec:
         zh_Hant: 如果啟用，機器人將使用 Webhook 模式接收訊息。否則，將使用 WebSocket 模式
       type: boolean
       required: true
-      default: false
+      default: true
     - name: enable-stream-reply
       label:
         en_US: Enable Stream Reply Mode

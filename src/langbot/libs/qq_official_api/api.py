@@ -9,6 +9,7 @@ import langbot_plugin.api.entities.builtin.platform.events as platform_events
 from .qqofficialevent import QQOfficialEvent
 import json
 import traceback
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 
@@ -36,6 +37,7 @@ class QQOfficialClient:
         self.logger = logger
         self._msg_seq_counter = 0
         self._token_refresh_task: Optional[asyncio.Task] = None
+        self._webhook_tasks: set[asyncio.Task] = set()
 
     async def check_access_token(self):
         """检查access_token是否存在"""
@@ -100,23 +102,40 @@ class QQOfficialClient:
             payload = json.loads(body)
 
             if payload.get('op') == 13:
+                callback_app_id = req.headers.get('X-Bot-Appid', '')
+                if callback_app_id and callback_app_id != self.app_id:
+                    return {'error': 'invalid bot app id'}, 401
                 validation_data = payload.get('d')
                 if not validation_data:
                     return {'error': "missing 'd' field"}, 400
                 response = await self.verify(validation_data)
                 return response, 200
 
+            if not await self.verify_callback_signature(req.headers, body):
+                await self.logger.warning('Rejected QQ Official webhook with an invalid signature')
+                return {'error': 'invalid callback signature'}, 401
+
             if payload.get('op') == 0:
                 message_data = await self.get_message(payload)
                 if message_data:
                     event = QQOfficialEvent.from_payload(message_data)
-                    await self._handle_message(event)
+                    task = asyncio.create_task(self._dispatch_webhook_event(event))
+                    self._webhook_tasks.add(task)
+                    task.add_done_callback(self._webhook_tasks.discard)
+                return {'op': 12}, 200
 
             return {'code': 0, 'message': 'success'}
 
         except Exception as e:
             await self.logger.error(f'Error in handle_callback_request: {traceback.format_exc()}')
             return {'error': str(e)}, 400
+
+    async def _dispatch_webhook_event(self, event: QQOfficialEvent):
+        """Dispatch an event after acknowledging the QQ callback immediately."""
+        try:
+            await self._handle_message(event)
+        except Exception:
+            await self.logger.error(f'Error dispatching QQ Official webhook: {traceback.format_exc()}')
 
     async def run_task(self, host: str, port: int, *args, **kwargs):
         """启动 Quart 应用"""
@@ -513,6 +532,22 @@ class QQOfficialClient:
             'signature': signature,
         }
         return response
+
+    async def verify_callback_signature(self, headers, body: bytes) -> bool:
+        """Verify a QQ callback using the Bot Secret derived Ed25519 key."""
+        signature_hex = headers.get('X-Signature-Ed25519', '')
+        timestamp = headers.get('X-Signature-Timestamp', '')
+        if not signature_hex or not timestamp:
+            return False
+
+        try:
+            signature = bytes.fromhex(signature_hex)
+            seed = await self.repeat_seed(self.secret)
+            private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+            private_key.public_key().verify(signature, timestamp.encode() + body)
+        except (InvalidSignature, ValueError):
+            return False
+        return True
 
     # ---- WebSocket Gateway ----
     # Reference: https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html

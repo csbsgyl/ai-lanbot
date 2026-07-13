@@ -723,6 +723,10 @@ print_success_info() {
   log "Install directory: ${INSTALL_DIR}"
   log "Local URL: ${local_url}"
   log "Remote URL: ${remote_url}"
+  log "QQ callback upstream (reverse proxy on this server): ${local_url}"
+  log "QQ callback upstream (reverse proxy on another server): ${remote_url}"
+  log "QQ callback route: /bots/<bot-uuid>"
+  log "QQ platform callback after HTTPS proxy: https://<your-domain>/bots/<bot-uuid>"
 
   if is_initialized "$local_url"; then
     log "Admin account: already initialized."

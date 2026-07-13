@@ -1,9 +1,41 @@
+import asyncio
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
+import yaml
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from quart import Quart
 
 import langbot_plugin.api.entities.builtin.platform.message as platform_message
 from langbot.libs.qq_official_api.api import QQOfficialClient
 from langbot.libs.qq_official_api.qqofficialevent import QQOfficialEvent
+from langbot.pkg.api.http.controller.groups.webhooks import WebhookRouterGroup
 from langbot.pkg.platform.sources.qqofficial import QQOfficialEventConverter
+
+
+def _logger():
+    return SimpleNamespace(info=AsyncMock(), warning=AsyncMock(), error=AsyncMock())
+
+
+def _qq_secret_seed(secret: str) -> bytes:
+    seed = secret
+    while len(seed) < 32:
+        seed *= 2
+    return seed[:32].encode()
+
+
+def _signed_request(body: bytes, secret: str, timestamp: str = '1725442341'):
+    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(_qq_secret_seed(secret))
+    signature = private_key.sign(timestamp.encode() + body).hex()
+    return SimpleNamespace(
+        headers={
+            'X-Signature-Ed25519': signature,
+            'X-Signature-Timestamp': timestamp,
+        },
+        get_data=AsyncMock(return_value=body),
+    )
 
 
 def _group_event(**overrides) -> QQOfficialEvent:
@@ -131,3 +163,145 @@ async def test_group_message_allows_empty_text_content():
     plain_parts = [item for item in converted.message_chain if isinstance(item, platform_message.Plain)]
 
     assert plain_parts == []
+
+
+def test_qqofficial_defaults_to_webhook_and_does_not_require_legacy_token():
+    with open('src/langbot/pkg/platform/sources/qqofficial.yaml', encoding='utf-8') as file:
+        config_items = yaml.safe_load(file)['spec']['config']
+
+    config_by_name = {item['name']: item for item in config_items}
+    assert config_by_name['enable-webhook']['default'] is True
+    assert config_by_name['token']['required'] is False
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_validation_returns_secret_signature():
+    secret = 'test-secret'
+    body = json.dumps(
+        {'op': 13, 'd': {'plain_token': 'plain-token', 'event_ts': '1725442341'}},
+        separators=(',', ':'),
+    ).encode()
+    request = SimpleNamespace(
+        headers={'X-Bot-Appid': 'test-app'},
+        get_data=AsyncMock(return_value=body),
+    )
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret=secret,
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    response, status = await client.handle_unified_webhook(request)
+
+    assert status == 200
+    assert response['plain_token'] == 'plain-token'
+    ed25519.Ed25519PrivateKey.from_private_bytes(_qq_secret_seed(secret)).public_key().verify(
+        bytes.fromhex(response['signature']),
+        b'1725442341plain-token',
+    )
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_rejects_unsigned_event():
+    body = json.dumps({'op': 0, 't': 'GROUP_AT_MESSAGE_CREATE', 'd': {}}).encode()
+    request = SimpleNamespace(headers={}, get_data=AsyncMock(return_value=body))
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    response, status = await client.handle_unified_webhook(request)
+
+    assert status == 401
+    assert response == {'error': 'invalid callback signature'}
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_acknowledges_signed_event_before_dispatch():
+    body = json.dumps(
+        {
+            'op': 0,
+            't': 'GROUP_AT_MESSAGE_CREATE',
+            'd': {
+                'id': 'message-1',
+                'content': '帮助',
+                'group_openid': 'group-openid',
+                'author': {'member_openid': 'member-openid'},
+            },
+        },
+        separators=(',', ':'),
+    ).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client._handle_message = AsyncMock()
+
+    response, status = await client.handle_unified_webhook(_signed_request(body, 'test-secret'))
+    await asyncio.sleep(0)
+
+    assert status == 200
+    assert response == {'op': 12}
+    client._handle_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_is_reachable_through_per_bot_http_route():
+    body = json.dumps(
+        {
+            'op': 0,
+            't': 'GROUP_AT_MESSAGE_CREATE',
+            'd': {
+                'id': 'message-1',
+                'content': '帮助',
+                'group_openid': 'group-openid',
+                'author': {'member_openid': 'member-openid'},
+            },
+        },
+        separators=(',', ':'),
+    ).encode()
+    qq_client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    qq_client._handle_message = AsyncMock()
+
+    async def handle_unified_webhook(*, bot_uuid, path, request):
+        assert bot_uuid == 'test-bot-uuid'
+        assert path == ''
+        return await qq_client.handle_unified_webhook(request)
+
+    runtime_bot = SimpleNamespace(
+        enable=True,
+        adapter=SimpleNamespace(handle_unified_webhook=handle_unified_webhook),
+    )
+    application = SimpleNamespace(
+        platform_mgr=SimpleNamespace(get_bot_by_uuid=AsyncMock(return_value=runtime_bot)),
+        logger=_logger(),
+    )
+    quart_app = Quart(__name__)
+    router = WebhookRouterGroup(application, quart_app)
+    await router.initialize()
+    signed_headers = _signed_request(body, 'test-secret').headers
+
+    response = await quart_app.test_client().post(
+        '/bots/test-bot-uuid',
+        data=body,
+        headers={**signed_headers, 'Content-Type': 'application/json'},
+    )
+    await asyncio.sleep(0)
+
+    assert response.status_code == 200
+    assert await response.get_json() == {'op': 12}
+    qq_client._handle_message.assert_awaited_once()

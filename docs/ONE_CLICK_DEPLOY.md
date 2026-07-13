@@ -31,6 +31,7 @@ The script also checks Docker image access automatically. By default it starts f
 - Waits for the Plugin Runtime to become healthy before starting LangBot.
 - Waits for `/api/v1/system/info` to pass before reporting success.
 - Prints the local URL, remote URL, first-time setup URL, login URL, and maintenance commands.
+- Prints the QQ callback reverse-proxy upstream and the per-bot callback path.
 - Installs a systemd path unit that accepts fixed update requests from the authenticated WebUI without mounting the host Docker socket into LangBot.
 
 ## In-App Updates
@@ -60,6 +61,33 @@ The script does not create or print a default username/password. A fresh LangBot
 - First deployment: open `/register` and create the first administrator account.
 - After initialization: open `/login` and sign in with the account you created.
 - If the health check fails, the script exits with an error and prints recent container status/logs instead of reporting success.
+
+## QQ Official Callback
+
+The production container publishes LangBot on host port `5300`. When the HTTPS
+reverse proxy runs on the same server, use `http://127.0.0.1:5300` as its
+upstream. When the reverse proxy runs elsewhere, use
+`http://<server-ip>:5300` and restrict that port to the proxy server in the
+host firewall or cloud security group.
+
+Each bot receives its own callback route after it is created:
+
+```text
+/bots/<bot-uuid>
+```
+
+Keep this path unchanged in the reverse proxy. The URL entered in the QQ
+Open Platform must therefore be an externally reachable HTTPS URL such as:
+
+```text
+https://bot.example.com/bots/<bot-uuid>
+```
+
+QQ currently permits callback ports `80`, `443`, `8080`, and `8443`; HTTPS is
+required. The bundled QQ Official adapter handles the `op=13` callback
+validation, verifies signed event callbacks, and acknowledges accepted events
+with `op=12`. New QQ Official bots default to Webhook mode. WebSocket mode
+remains available as an explicit adapter setting.
 
 ## Optional Environment Variables
 
