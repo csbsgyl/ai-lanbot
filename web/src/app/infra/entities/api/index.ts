@@ -480,10 +480,14 @@ export interface QQOfficialWebhookMetrics {
   events_total: number;
   duplicates_total: number;
   rejected_total: number;
+  overloaded_total: number;
+  pending_events: number;
+  pending_limit: number;
   last_request_at: string | null;
   last_valid_at: string | null;
   last_event_at: string | null;
   last_rejected_at: string | null;
+  last_overloaded_at: string | null;
 }
 
 export interface QQOfficialBotStatus {

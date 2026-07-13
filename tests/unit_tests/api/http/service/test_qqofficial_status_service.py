@@ -18,10 +18,14 @@ def _qq_runtime_bot(
         'events_total': 2,
         'duplicates_total': 0,
         'rejected_total': 0,
+        'overloaded_total': 0,
+        'pending_events': 0,
+        'pending_limit': 256,
         'last_request_at': '2026-07-13T10:05:00+00:00',
         'last_valid_at': '2026-07-13T10:05:00+00:00',
         'last_event_at': '2026-07-13T10:05:00+00:00',
         'last_rejected_at': None,
+        'last_overloaded_at': None,
     }
     client = SimpleNamespace(app_id=app_id, get_webhook_status=lambda: metrics)
     return SimpleNamespace(
@@ -46,6 +50,7 @@ async def test_reports_ready_webhook_without_secrets():
     assert result['active_webhook_bots'] == 1
     assert result['bots'][0]['app_id'] == '1029384756'
     assert result['bots'][0]['metrics']['events_total'] == 2
+    assert result['bots'][0]['metrics']['pending_limit'] == 256
     assert 'secret' not in str(result).lower()
     assert 'token' not in str(result).lower()
 

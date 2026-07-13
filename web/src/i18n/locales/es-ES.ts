@@ -1741,6 +1741,8 @@ const esES = {
       validations: 'Validaciones',
       duplicates: 'Duplicados',
       rejected: 'Rechazados',
+      pending: 'Eventos pendientes',
+      overloaded: 'Sobrecargas',
       status: {
         ready: 'Listo',
         not_configured: 'Sin bot de QQ configurado',

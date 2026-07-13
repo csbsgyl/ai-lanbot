@@ -248,6 +248,23 @@ export default function QQCallbackStatusPanel({
                           {bot.metrics.rejected_total}
                         </div>
                       </div>
+                      <div>
+                        <div className="text-muted-foreground">
+                          {t('idcQuery.callback.pending')}
+                        </div>
+                        <div className="mt-1 tabular-nums">
+                          {bot.metrics.pending_events} /{' '}
+                          {bot.metrics.pending_limit}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">
+                          {t('idcQuery.callback.overloaded')}
+                        </div>
+                        <div className="mt-1 tabular-nums">
+                          {bot.metrics.overloaded_total}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </article>

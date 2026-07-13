@@ -1678,6 +1678,8 @@ const thTH = {
       validations: 'การตรวจสอบ',
       duplicates: 'รายการซ้ำ',
       rejected: 'ปฏิเสธ',
+      pending: 'เหตุการณ์ที่รอดำเนินการ',
+      overloaded: 'โอเวอร์โหลด',
       status: {
         ready: 'พร้อมใช้งาน',
         not_configured: 'ยังไม่ได้กำหนดค่าบอต QQ',

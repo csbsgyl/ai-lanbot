@@ -414,13 +414,16 @@ class QQOfficialAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter
             pass
 
     async def kill(self) -> bool:
-        if self._ws_task:
-            self._ws_task.cancel()
-            try:
-                await self._ws_task
-            except asyncio.CancelledError:
-                pass
-            self._ws_task = None
+        try:
+            if self._ws_task:
+                self._ws_task.cancel()
+                try:
+                    await self._ws_task
+                except asyncio.CancelledError:
+                    pass
+                self._ws_task = None
+        finally:
+            await self.bot.shutdown()
         return True
 
     # --------------- 流式输出 ---------------

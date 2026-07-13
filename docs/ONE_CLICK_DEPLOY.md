@@ -93,6 +93,11 @@ validation with a bounded challenge timestamp, verifies signed event callbacks,
 and acknowledges accepted events
 with `op=12`. Signed callbacks outside the accepted time window are rejected,
 and recently seen event IDs are acknowledged without being processed twice.
+Callback dispatch uses a bounded pending queue. If the queue is full, LangBot
+returns `503` without marking the event as processed so QQ can retry it later.
+Configure the reverse proxy to pass through this status code instead of
+rewriting it to `200`; the callback diagnostics page reports current queue
+usage and overload count.
 New QQ Official bots default to Webhook mode. WebSocket mode remains available
 as an explicit adapter setting.
 

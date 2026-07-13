@@ -1715,6 +1715,8 @@ const ruRU = {
       validations: 'Проверки',
       duplicates: 'Дубликаты',
       rejected: 'Отклонено',
+      pending: 'В очереди',
+      overloaded: 'Перегрузки',
       status: {
         ready: 'Готов',
         not_configured: 'Бот QQ не настроен',

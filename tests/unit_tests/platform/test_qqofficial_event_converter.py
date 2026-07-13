@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
@@ -13,7 +13,7 @@ import langbot_plugin.api.entities.builtin.platform.message as platform_message
 from langbot.libs.qq_official_api.api import QQOfficialClient
 from langbot.libs.qq_official_api.qqofficialevent import QQOfficialEvent
 from langbot.pkg.api.http.controller.groups.webhooks import QQWebhookRouterGroup, WebhookRouterGroup
-from langbot.pkg.platform.sources.qqofficial import QQOfficialEventConverter
+from langbot.pkg.platform.sources.qqofficial import QQOfficialAdapter, QQOfficialEventConverter
 
 
 def _logger():
@@ -381,6 +381,101 @@ async def test_qq_webhook_acknowledges_duplicate_event_without_dispatching_twice
 
 
 @pytest.mark.asyncio
+async def test_qq_webhook_retries_an_event_after_pending_queue_recovers():
+    def event_body(event_id: str) -> bytes:
+        return json.dumps(
+            {
+                'id': f'event-{event_id}',
+                'op': 0,
+                't': 'GROUP_AT_MESSAGE_CREATE',
+                'd': {
+                    'id': event_id,
+                    'content': '查余额',
+                    'group_openid': 'group-openid',
+                    'author': {'member_openid': 'member-openid'},
+                },
+            },
+            separators=(',', ':'),
+        ).encode()
+
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client.CALLBACK_MAX_PENDING_EVENTS = 1
+    handler_started = asyncio.Event()
+    release_handler = asyncio.Event()
+    handled_message_ids: list[str] = []
+
+    async def slow_handler(event: QQOfficialEvent):
+        handled_message_ids.append(event.d_id)
+        handler_started.set()
+        await release_handler.wait()
+
+    client._handle_message = AsyncMock(side_effect=slow_handler)
+    first_body = event_body('message-1')
+    second_body = event_body('message-2')
+
+    first_response = await client.handle_unified_webhook(_signed_request(first_body, 'test-secret'))
+    await asyncio.wait_for(handler_started.wait(), timeout=1)
+    overloaded_response = await client.handle_unified_webhook(_signed_request(second_body, 'test-secret'))
+
+    assert first_response == ({'op': 12}, 200)
+    assert overloaded_response == ({'error': 'callback temporarily unavailable'}, 503)
+    assert handled_message_ids == ['message-1']
+    metrics = client.get_webhook_status()
+    assert metrics['pending_events'] == 1
+    assert metrics['pending_limit'] == 1
+    assert metrics['overloaded_total'] == 1
+    assert metrics['rejected_total'] == 1
+    assert metrics['last_overloaded_at'] is not None
+
+    release_handler.set()
+    await asyncio.gather(*tuple(client._webhook_tasks))
+    retry_response = await client.handle_unified_webhook(_signed_request(second_body, 'test-secret'))
+    await asyncio.gather(*tuple(client._webhook_tasks))
+
+    assert retry_response == ({'op': 12}, 200)
+    assert handled_message_ids == ['message-1', 'message-2']
+    assert client.get_webhook_status()['pending_events'] == 0
+
+
+@pytest.mark.asyncio
+async def test_qq_adapter_kill_stops_client_background_tasks():
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    adapter = QQOfficialAdapter.model_construct(
+        config={'enable-webhook': True},
+        logger=_logger(),
+        bot=client,
+        bot_account_id='test-app',
+        enable_webhook=True,
+    )
+    adapter._ws_task = None
+    adapter.bot.CALLBACK_SHUTDOWN_TIMEOUT_SECONDS = 0
+    webhook_task = asyncio.create_task(asyncio.Event().wait())
+    token_task = asyncio.create_task(asyncio.Event().wait())
+    adapter.bot._webhook_tasks.add(webhook_task)
+    adapter.bot._token_refresh_task = token_task
+    await asyncio.sleep(0)
+
+    assert await adapter.kill() is True
+
+    assert webhook_task.cancelled()
+    assert token_task.cancelled()
+    assert adapter.bot._token_refresh_task is None
+    assert adapter.bot.get_webhook_status()['pending_events'] == 0
+
+
+@pytest.mark.asyncio
 async def test_qq_webhook_rejects_oversized_body_before_reading_it():
     request = SimpleNamespace(
         headers={},
@@ -562,3 +657,55 @@ async def test_qq_webhook_is_reachable_through_stable_callback_route():
     assert response.status_code == 200
     assert await response.get_json() == {'op': 12}
     qq_client._handle_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_per_bot_webhook_route_hides_internal_dispatch_errors():
+    secret = 'token=/private/runtime/config.env'
+    application = SimpleNamespace(
+        platform_mgr=SimpleNamespace(get_bot_by_uuid=AsyncMock(side_effect=RuntimeError(secret))),
+        logger=SimpleNamespace(error=Mock()),
+    )
+    quart_app = Quart(__name__)
+    router = WebhookRouterGroup(application, quart_app)
+    await router.initialize()
+
+    response = await quart_app.test_client().post('/bots/test-bot-uuid', data=b'{}')
+    response_data = await response.get_json()
+
+    assert response.status_code == 500
+    assert response_data == {'error': 'Webhook dispatch failed'}
+    assert secret not in json.dumps(response_data)
+
+
+@pytest.mark.asyncio
+async def test_stable_qq_webhook_route_hides_internal_dispatch_errors():
+    secret = 'secret loaded from /private/qq-config.yaml'
+    adapter = SimpleNamespace(
+        bot=SimpleNamespace(app_id='test-app'),
+        enable_webhook=True,
+        handle_unified_webhook=AsyncMock(side_effect=RuntimeError(secret)),
+    )
+    runtime_bot = SimpleNamespace(
+        enable=True,
+        adapter=adapter,
+        bot_entity=SimpleNamespace(uuid='test-bot-uuid', adapter='qqofficial'),
+    )
+    application = SimpleNamespace(
+        platform_mgr=SimpleNamespace(bots=[runtime_bot]),
+        logger=SimpleNamespace(error=Mock()),
+    )
+    quart_app = Quart(__name__)
+    router = QQWebhookRouterGroup(application, quart_app)
+    await router.initialize()
+
+    response = await quart_app.test_client().post(
+        '/qq/callback',
+        data=b'{}',
+        headers={'X-Bot-Appid': 'test-app'},
+    )
+    response_data = await response.get_json()
+
+    assert response.status_code == 500
+    assert response_data == {'error': 'QQ webhook dispatch failed'}
+    assert secret not in json.dumps(response_data)

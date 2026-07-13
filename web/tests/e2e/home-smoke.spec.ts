@@ -172,6 +172,9 @@ test.describe('authenticated app shell', () => {
       dialog.getByRole('textbox', { name: 'Callback URL' }),
     ).toHaveValue(`${new URL(page.url()).origin}/qq/callback`);
     await expect(dialog.getByText('1029384756')).toBeVisible();
+    await expect(dialog.getByText('Pending events')).toBeVisible();
+    await expect(dialog.getByText('0 / 256')).toBeVisible();
+    await expect(dialog.getByText('Overloaded')).toBeVisible();
     await dialog.getByRole('tab', { name: 'Configuration' }).click();
 
     await dialog

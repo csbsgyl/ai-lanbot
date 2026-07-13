@@ -1710,6 +1710,8 @@ const jaJP = {
       validations: '検証',
       duplicates: '重複',
       rejected: '拒否',
+      pending: '保留中',
+      overloaded: '過負荷',
       status: {
         ready: '受信可能',
         not_configured: 'QQ ボット未設定',

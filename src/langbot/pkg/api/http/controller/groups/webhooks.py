@@ -49,9 +49,9 @@ class WebhookRouterGroup(group.RouterGroup):
 
             return response
 
-        except Exception as e:
+        except Exception:
             self.ap.logger.error(f'Webhook dispatch error for bot {bot_uuid}: {traceback.format_exc()}')
-            return quart.jsonify({'error': str(e)}), 500
+            return quart.jsonify({'error': 'Webhook dispatch failed'}), 500
 
 
 @group.group_class('qq_webhook', '/qq')
@@ -91,6 +91,6 @@ class QQWebhookRouterGroup(group.RouterGroup):
                 path='',
                 request=quart.request,
             )
-        except Exception as e:
+        except Exception:
             self.ap.logger.error(f'QQ webhook dispatch error: {traceback.format_exc()}')
-            return quart.jsonify({'error': str(e)}), 500
+            return quart.jsonify({'error': 'QQ webhook dispatch failed'}), 500

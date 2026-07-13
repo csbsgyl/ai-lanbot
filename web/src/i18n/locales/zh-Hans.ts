@@ -1634,6 +1634,8 @@ const zhHans = {
       validations: '验证次数',
       duplicates: '重复事件',
       rejected: '拒绝请求',
+      pending: '待处理事件',
+      overloaded: '过载次数',
       status: {
         ready: '可接收回调',
         not_configured: '未配置 QQ 机器人',

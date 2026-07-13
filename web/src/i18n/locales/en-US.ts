@@ -1704,6 +1704,8 @@ const enUS = {
       validations: 'Validations',
       duplicates: 'Duplicates',
       rejected: 'Rejected',
+      pending: 'Pending events',
+      overloaded: 'Overloaded',
       status: {
         ready: 'Ready',
         not_configured: 'No QQ bot configured',

@@ -20,6 +20,8 @@ class QQOfficialClient:
     CALLBACK_SIGNATURE_MAX_AGE_SECONDS = 300
     CALLBACK_DEDUP_TTL_SECONDS = 600
     CALLBACK_DEDUP_MAX_EVENTS = 4096
+    CALLBACK_MAX_PENDING_EVENTS = 256
+    CALLBACK_SHUTDOWN_TIMEOUT_SECONDS = 5
 
     def __init__(self, secret: str, token: str, app_id: str, logger: None, unified_mode: bool = False):
         self.unified_mode = unified_mode
@@ -53,10 +55,12 @@ class QQOfficialClient:
             'events_total': 0,
             'duplicates_total': 0,
             'rejected_total': 0,
+            'overloaded_total': 0,
             'last_request_at': None,
             'last_valid_at': None,
             'last_event_at': None,
             'last_rejected_at': None,
+            'last_overloaded_at': None,
         }
 
     async def check_access_token(self):
@@ -176,12 +180,21 @@ class QQOfficialClient:
                     self._record_webhook_metric('duplicates_total')
                     await self.logger.info('Ignored duplicate QQ Official webhook event')
                     return {'op': 12}, 200
-                message_data = await self.get_message(payload)
-                if message_data:
-                    event = QQOfficialEvent.from_payload(message_data)
-                    task = asyncio.create_task(self._dispatch_webhook_event(event))
-                    self._webhook_tasks.add(task)
-                    task.add_done_callback(self._webhook_tasks.discard)
+
+                if self._pending_webhook_task_count() >= self.CALLBACK_MAX_PENDING_EVENTS:
+                    self._forget_webhook_event(payload)
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                    self._record_webhook_metric('overloaded_total', 'last_overloaded_at')
+                    await self.logger.warning('QQ Official webhook event queue is full')
+                    return {'error': 'callback temporarily unavailable'}, 503
+
+                try:
+                    task = asyncio.create_task(self._dispatch_webhook_payload(payload))
+                except Exception:
+                    self._forget_webhook_event(payload)
+                    raise
+                self._webhook_tasks.add(task)
+                task.add_done_callback(self._webhook_tasks.discard)
                 self._record_webhook_metric('events_total', 'last_event_at')
                 return {'op': 12}, 200
 
@@ -208,14 +221,52 @@ class QQOfficialClient:
 
     def get_webhook_status(self) -> dict[str, int | str | None]:
         """Return content-free callback diagnostics for authenticated operators."""
-        return dict(self._webhook_metrics)
+        status = dict(self._webhook_metrics)
+        status['pending_events'] = self._pending_webhook_task_count()
+        status['pending_limit'] = self.CALLBACK_MAX_PENDING_EVENTS
+        return status
 
-    async def _dispatch_webhook_event(self, event: QQOfficialEvent):
+    async def _dispatch_webhook_payload(self, payload: dict[str, Any]):
         """Dispatch an event after acknowledging the QQ callback immediately."""
         try:
+            message_data = await self.get_message(payload)
+            if not message_data:
+                return
+            event = QQOfficialEvent.from_payload(message_data)
+            if event is None:
+                return
             await self._handle_message(event)
         except Exception:
             await self.logger.error(f'Error dispatching QQ Official webhook: {traceback.format_exc()}')
+
+    async def shutdown(self) -> None:
+        """Stop background work owned by this client during adapter reloads."""
+        token_task = self._token_refresh_task
+        self._token_refresh_task = None
+        if token_task and not token_task.done():
+            token_task.cancel()
+            await asyncio.gather(token_task, return_exceptions=True)
+
+        current_task = asyncio.current_task()
+        webhook_tasks = tuple(task for task in self._webhook_tasks if task is not current_task)
+        if not webhook_tasks:
+            return
+
+        _done, pending = await asyncio.wait(
+            webhook_tasks,
+            timeout=self.CALLBACK_SHUTDOWN_TIMEOUT_SECONDS,
+        )
+        if pending:
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            await self.logger.warning(f'Cancelled {len(pending)} pending QQ Official webhook event(s) during shutdown')
+        self._webhook_tasks.difference_update(webhook_tasks)
+
+    def _pending_webhook_task_count(self) -> int:
+        done_tasks = {task for task in self._webhook_tasks if task.done()}
+        self._webhook_tasks.difference_update(done_tasks)
+        return len(self._webhook_tasks)
 
     async def run_task(self, host: str, port: int, *args, **kwargs):
         """启动 Quart 应用"""
@@ -635,11 +686,8 @@ class QQOfficialClient:
         return True
 
     def _is_duplicate_webhook_event(self, payload: dict[str, Any]) -> bool:
-        event_data = payload.get('d')
-        event_id = payload.get('id')
-        if not event_id and isinstance(event_data, dict):
-            event_id = event_data.get('id')
-        if not isinstance(event_id, str) or not event_id:
+        event_id = self._webhook_event_id(payload)
+        if event_id is None:
             return False
 
         now = time.monotonic()
@@ -659,6 +707,21 @@ class QQOfficialClient:
         while len(self._seen_webhook_events) > self.CALLBACK_DEDUP_MAX_EVENTS:
             self._seen_webhook_events.popitem(last=False)
         return False
+
+    def _forget_webhook_event(self, payload: dict[str, Any]) -> None:
+        event_id = self._webhook_event_id(payload)
+        if event_id is not None:
+            self._seen_webhook_events.pop(event_id, None)
+
+    @staticmethod
+    def _webhook_event_id(payload: dict[str, Any]) -> str | None:
+        event_data = payload.get('d')
+        event_id = payload.get('id')
+        if not event_id and isinstance(event_data, dict):
+            event_id = event_data.get('id')
+        if not isinstance(event_id, str) or not event_id:
+            return None
+        return event_id
 
     # ---- WebSocket Gateway ----
     # Reference: https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html

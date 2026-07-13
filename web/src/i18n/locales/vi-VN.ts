@@ -1705,6 +1705,8 @@ const viVN = {
       validations: 'Xác minh',
       duplicates: 'Trùng lặp',
       rejected: 'Từ chối',
+      pending: 'Đang chờ',
+      overloaded: 'Quá tải',
       status: {
         ready: 'Sẵn sàng',
         not_configured: 'Chưa cấu hình bot QQ',

@@ -1632,6 +1632,8 @@ const zhHant = {
       validations: '驗證次數',
       duplicates: '重複事件',
       rejected: '拒絕請求',
+      pending: '待處理事件',
+      overloaded: '過載次數',
       status: {
         ready: '可接收回調',
         not_configured: '未設定 QQ 機器人',
