@@ -227,6 +227,22 @@ async def test_malformed_gateway_url_from_disk_is_reported_without_raising():
 
 
 @pytest.mark.asyncio
+async def test_gateway_url_with_invisible_formatting_character_is_invalid():
+    result = await IDCReadinessService(
+        _make_app(
+            config={
+                'base_url': 'https://query.example.com/\u202eTXT',
+                'verify_tls': True,
+                'token_configured': True,
+            }
+        )
+    ).get_readiness()
+
+    assert _checks_by_id(result)['gateway_config']['code'] == 'invalid'
+    assert result['status'] == 'not_ready'
+
+
+@pytest.mark.asyncio
 async def test_manually_edited_gateway_url_with_whitespace_is_invalid():
     result = await IDCReadinessService(
         _make_app(

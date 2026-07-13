@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import unicodedata
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
@@ -152,7 +153,7 @@ class IDCReadinessService:
         parsed = None
         valid_url = False
         invalid_character = any(
-            character.isspace() or ord(character) < 32 or ord(character) == 127 for character in base_url
+            character.isspace() or unicodedata.category(character) in {'Cc', 'Cf', 'Cs'} for character in base_url
         )
         if base_url and not invalid_character:
             try:

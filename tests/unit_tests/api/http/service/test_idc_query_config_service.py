@@ -101,6 +101,8 @@ async def test_blank_token_preserves_existing_token_and_explicit_clear_removes_i
         ({'requests_per_minute': True}, 'must be an integer'),
         ({'bind_attempts_per_10_minutes': 1001}, 'between 1 and 1000'),
         ({'token': 'invalid\ttoken'}, 'token is invalid'),
+        ({'token': '非ASCII令牌'}, 'token is invalid'),
+        ({'base_url': 'https://query.example.com/\u202eTXT'}, 'Gateway URL is invalid'),
         ({'unknown': 'value'}, 'unsupported fields'),
         ({'token': 'replacement', 'clear_token': True}, 'replaced and cleared'),
     ],
@@ -278,7 +280,7 @@ async def test_audit_reader_returns_latest_valid_events_across_rotated_files(con
             'command': 'balance',
             'outcome': 'denied',
             'reason': 'binder_required',
-            'group_id': 'group-1\nignored',
+            'group_id': 'group-1\nignored\u202eTXT',
             'user_id': 'user-2',
             'member_id': 'member-1',
             'request_id': 'request-3',
@@ -311,7 +313,7 @@ async def test_audit_reader_returns_latest_valid_events_across_rotated_files(con
 
     assert result['count'] == 3
     assert [event['request_id'] for event in result['events']] == ['request-3', 'request-2', 'request-1']
-    assert result['events'][0]['group_id'] == 'group-1ignored'
+    assert result['events'][0]['group_id'] == 'group-1 ignored TXT'
     assert result['generated_at']
 
 
@@ -350,7 +352,7 @@ async def test_binding_reader_returns_latest_valid_bindings(config_service: IDCQ
                         'member_id': 'member-2',
                         'bound_by': 'user-2',
                         'bound_at': '2026-07-12T10:02:00+00:00',
-                        'member_name': 'Customer Two\nIgnored',
+                        'member_name': 'Customer Two\nIgnored\u202eTXT',
                     },
                     'group-invalid': {
                         'group_id': 'different-group',
@@ -374,7 +376,7 @@ async def test_binding_reader_returns_latest_valid_bindings(config_service: IDCQ
             'member_id': 'member-2',
             'bound_by': 'user-2',
             'bound_at': '2026-07-12T10:02:00+00:00',
-            'member_name': 'Customer TwoIgnored',
+            'member_name': 'Customer Two Ignored TXT',
         }
     ]
     assert result['generated_at']

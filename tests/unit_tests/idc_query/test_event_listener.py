@@ -161,6 +161,42 @@ async def test_listener_rejects_qq_group_event_without_member_identity():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('group_id', 'member_id', 'message_id'),
+    [
+        ('group-openid', 'member-openid', ''),
+        ('group-openid\u202eTXT', 'member-openid', 'message-id'),
+        ('group-openid', '成员', 'message-id'),
+    ],
+)
+async def test_listener_rejects_missing_or_unsafe_qq_identifiers(group_id, member_id, message_id):
+    plugin = FakePlugin()
+    listener = IDCQueryEventListener()
+    listener.plugin = plugin
+    await listener.initialize()
+    handler = listener.registered_handlers[events.GroupMessageReceived][0]
+    event = SimpleNamespace(
+        launcher_id='fallback-group',
+        sender_id='fallback-member',
+        message_event=SimpleNamespace(
+            source_platform_object={
+                't': 'GROUP_AT_MESSAGE_CREATE',
+                'group_openid': group_id,
+                'member_openid': member_id,
+                'd_id': message_id,
+            }
+        ),
+        message_chain=platform_message.MessageChain([platform_message.Plain(text='查余额')]),
+    )
+    event_context = FakeEventContext(event)
+
+    await handler(event_context)
+
+    assert plugin.calls == []
+    assert event_context.prevented_default is False
+
+
+@pytest.mark.asyncio
 async def test_listener_blocks_llm_when_query_processing_crashes():
     plugin = FailingPlugin()
     listener = IDCQueryEventListener()

@@ -43,6 +43,12 @@ tokens, gateway error messages, or response payloads. The local audit file is
 owner-only, rotates at 5 MiB, and keeps three backups. Gateway-side rate limits
 and audit logging remain required for multi-instance enforcement.
 
+Business requests do not follow redirects or use environment proxy settings.
+Gateway responses are bounded after decompression, validated for JSON size and
+complexity, and rendered through fixed output limits. Free-form upstream error
+messages are never sent to QQ; use stable `error.code` values from the gateway
+contract for operator-safe user feedback.
+
 See the
 [IDC query gateway contract](https://github.com/csbsgyl/ai-lanbot/blob/main/docs/IDC_QUERY_GATEWAY.md)
 for the normalized HTTP interface.

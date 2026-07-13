@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 
+from .text import is_unsafe_character
+
 
 class JsonlAuditLog:
     def __init__(
@@ -89,4 +91,4 @@ class JsonlAuditLog:
     @staticmethod
     def _safe_text(value: object, limit: int) -> str:
         text = str(value or '')
-        return ''.join(character for character in text if ord(character) >= 32 and ord(character) != 127)[:limit]
+        return ''.join(character for character in text if not is_unsafe_character(character))[:limit]

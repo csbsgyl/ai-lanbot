@@ -103,13 +103,48 @@ Errors use an appropriate HTTP status and a short, non-sensitive message:
 ```json
 {
   "ok": false,
-  "message": "No permission or resource does not exist",
+  "error": {
+    "code": "FORBIDDEN"
+  },
+  "message": "optional operator-safe diagnostic",
   "trace_id": "gateway trace id"
 }
 ```
 
+Stable `error.code` values allow the bot to return useful fixed text without
+trusting an upstream message. Supported codes include
+`INVALID_VERIFICATION_CODE`, `BINDING_VERIFICATION_FAILED`,
+`MEMBER_NOT_FOUND`, `AUTHENTICATION_FAILED`, `SERVICE_TOKEN_INVALID`,
+`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, and
+`UPSTREAM_UNAVAILABLE`. Unknown codes receive a generic operation-specific
+message. The bot never displays the gateway's free-form `message` or error
+body, so keep those fields for gateway-side operators and logs only.
+The `ok` field is mandatory and must be a JSON boolean for binding and query
+responses. An empty successful response is accepted only for unbinding, where
+HTTP `204` is allowed.
+
 Do not return stack traces, access tokens, SQL, internal hosts, or upstream
 credentials. The plugin also removes common secret fields from generic output.
+
+## Transport and response limits
+
+- Every business request disables redirects. The gateway base URL must be the
+  final HTTP or HTTPS endpoint; redirect responses are rejected so service
+  credentials and QQ identity headers cannot be forwarded to another target.
+- The client ignores environment proxy variables and connects directly to the
+  configured gateway URL.
+- A JSON response must be at most 512 KiB after content decoding. Response
+  structures are limited to 16 container levels and 4,096 aggregate object or
+  array items.
+- Responses must be UTF-8 JSON objects. Non-standard constants such as `NaN`
+  and `Infinity` are rejected.
+- HTTP errors are classified before their response bodies are read. `401`
+  means the gateway service token is invalid, while `403` means the bound
+  member is not authorized.
+- QQ group, QQ user, bound-member, request, gateway-token, and base-URL values
+  are validated before network access. Control, surrogate, and invisible
+  formatting characters are rejected from security identifiers. Identity and
+  Bearer-token values must use visible ASCII characters.
 
 ## Binding endpoints
 
@@ -163,7 +198,10 @@ The gateway should keep an audit record even after deletion.
 
 The gateway may return a preformatted `data.text`, a `data.fields` list, or a
 plain object/list. Structured data is preferred because the plugin can apply
-consistent labels and output limits.
+consistent labels and output limits. `data.text` must be a string; objects are
+never converted to text. Operator-facing output is bounded to 32 lines and
+1,800 characters, removes invisible formatting controls, ignores top-level
+envelope metadata, and filters sensitive keys across names, keys, and labels.
 
 Example IP response:
 

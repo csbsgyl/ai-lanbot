@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .text import is_unsafe_character
+
 
 logger = logging.getLogger(__name__)
 _MAX_IDENTIFIER_LENGTH = 160
@@ -23,7 +25,7 @@ def _required_identifier(value: Any, field_name: str) -> str:
     if (
         not text
         or len(text) > _MAX_IDENTIFIER_LENGTH
-        or any(ord(character) < 32 or ord(character) == 127 for character in text)
+        or any(is_unsafe_character(character) for character in text)
     ):
         raise ValueError(f'{field_name} is invalid')
     return text
@@ -34,9 +36,8 @@ def _member_name(value: Any) -> str:
         return ''
     if not isinstance(value, str):
         raise ValueError('member_name must be a string')
-    return ''.join(character for character in value if ord(character) >= 32 and ord(character) != 127)[
-        :_MAX_MEMBER_NAME_LENGTH
-    ].strip()
+    sanitized = ''.join(' ' if is_unsafe_character(character) else character for character in value)
+    return ' '.join(sanitized.split())[:_MAX_MEMBER_NAME_LENGTH].strip()
 
 
 @dataclass(frozen=True)

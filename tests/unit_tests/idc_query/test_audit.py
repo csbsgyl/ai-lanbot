@@ -18,7 +18,7 @@ async def test_audit_log_writes_only_bounded_schema_fields(tmp_path):
         outcome='success',
         reason='bound',
         group_id='group-1\nignored',
-        user_id='user-1',
+        user_id='user-1\u202eTXT',
         member_id='member-1',
         request_id='request-1',
         duration_ms=14,
@@ -38,6 +38,8 @@ async def test_audit_log_writes_only_bounded_schema_fields(tmp_path):
         'duration_ms',
     }
     assert event['group_id'] == 'group-1ignored'
+    assert event['user_id'] == 'user-1TXT'
+    assert '\u202e' not in event['user_id']
     assert event['duration_ms'] == 14
     if os.name != 'nt':
         assert stat.S_IMODE(path.stat().st_mode) == 0o600

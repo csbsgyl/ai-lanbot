@@ -7,13 +7,17 @@ from langbot_plugin.api.definition.components.common.event_listener import Event
 from langbot_plugin.api.entities import context, events
 import langbot_plugin.api.entities.builtin.platform.message as platform_message
 
-
 logger = logging.getLogger(__name__)
 _PROCESSING_ERROR = '查询处理异常，请稍后重试或联系管理员。'
 
 
 def _identifier(value: Any) -> str:
-    return str(value).strip() if value not in (None, '', {}) else ''
+    if not isinstance(value, (str, int)) or isinstance(value, bool):
+        return ''
+    text = str(value).strip()
+    if not text or len(text) > 160 or any(not 33 <= ord(character) <= 126 for character in text):
+        return ''
+    return text
 
 
 def _source_value(source: Any, key: str) -> Any:
@@ -50,19 +54,19 @@ class IDCQueryEventListener(EventListener):
             if not text:
                 return
 
-            group_id = _identifier(_source_value(source, 'group_openid')) or _identifier(event.launcher_id)
-            raw_user_id = (
-                _identifier(_source_value(source, 'member_openid'))
-                or _identifier(_source_value(source, 'openid'))
-                or _identifier(_source_value(source, 'd_author_id'))
-            )
-            user_id = raw_user_id or (_identifier(event.sender_id) if source is None else '')
-            message_id = (
-                _identifier(_source_value(source, 'd_id'))
-                or _identifier(_source_value(source, 'id'))
-                or _identifier(getattr(getattr(event, 'query', None), 'query_id', ''))
-            )
-            if not group_id or not user_id:
+            if source is None:
+                group_id = _identifier(event.launcher_id)
+                user_id = _identifier(event.sender_id)
+                message_id = _identifier(getattr(getattr(event, 'query', None), 'query_id', ''))
+            else:
+                group_id = _identifier(_source_value(source, 'group_openid'))
+                user_id = (
+                    _identifier(_source_value(source, 'member_openid'))
+                    or _identifier(_source_value(source, 'openid'))
+                    or _identifier(_source_value(source, 'd_author_id'))
+                )
+                message_id = _identifier(_source_value(source, 'd_id')) or _identifier(_source_value(source, 'id'))
+            if not group_id or not user_id or not message_id:
                 if group_id and source_type == 'GROUP_AT_MESSAGE_CREATE':
                     logger.warning('Ignoring QQ group query event without a member identity')
                 return

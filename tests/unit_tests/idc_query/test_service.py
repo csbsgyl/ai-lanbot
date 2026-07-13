@@ -153,6 +153,93 @@ async def test_binding_rejects_mismatched_gateway_identity(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('invalid_member_id', [10086, ' 10086', '10086 '])
+async def test_binding_rejects_non_string_or_non_canonical_gateway_identity(tmp_path, invalid_member_id):
+    service, gateway = await _service(tmp_path)
+
+    async def verify_invalid_member(**kwargs):
+        gateway.verify_calls.append(kwargs)
+        return {'member_id': invalid_member_id}
+
+    gateway.verify_binding = verify_invalid_member
+    result = await service.handle(
+        text='绑定 10086 938421',
+        group_id='group-1',
+        user_id='binder',
+        message_id='message-1',
+    )
+
+    assert result.reply == '绑定验证结果异常，请联系管理员检查 IDC 查询网关。'
+    assert await service.store.get('group-1') is None
+
+
+@pytest.mark.asyncio
+async def test_binding_reply_uses_sanitized_bounded_member_name(tmp_path):
+    service, gateway = await _service(tmp_path)
+
+    async def verify_member(**kwargs):
+        gateway.verify_calls.append(kwargs)
+        return {'member_id': '10086', 'member_name': ' Example\r\nIDC\x00 ' + 'x' * 300}
+
+    gateway.verify_binding = verify_member
+    result = await service.handle(
+        text='绑定 10086 938421',
+        group_id='group-1',
+        user_id='binder',
+        message_id='message-1',
+    )
+    binding = await service.store.get('group-1')
+
+    assert '\r' not in result.reply
+    assert '\n' not in result.reply
+    assert '\x00' not in result.reply
+    assert binding.member_name.startswith('Example IDC ')
+    assert len(binding.member_name) <= 200
+    assert result.reply == f'绑定成功：会员 10086（{binding.member_name}）'
+
+
+@pytest.mark.asyncio
+async def test_binding_rejects_non_string_member_name(tmp_path):
+    service, gateway = await _service(tmp_path)
+
+    async def verify_member(**kwargs):
+        gateway.verify_calls.append(kwargs)
+        return {'member_id': '10086', 'member_name': {'secret': 'must-not-render'}}
+
+    gateway.verify_binding = verify_member
+    result = await service.handle(
+        text='绑定 10086 938421',
+        group_id='group-1',
+        user_id='binder',
+        message_id='message-1',
+    )
+
+    assert result.reply == '绑定验证结果异常，请联系管理员检查 IDC 查询网关。'
+    assert 'must-not-render' not in result.reply
+    assert await service.store.get('group-1') is None
+
+
+@pytest.mark.asyncio
+async def test_binding_reply_removes_unicode_directional_controls(tmp_path):
+    service, gateway = await _service(tmp_path)
+
+    async def verify_member(**kwargs):
+        gateway.verify_calls.append(kwargs)
+        return {'member_id': '10086', 'member_name': 'IDC\u202eTXT Customer'}
+
+    gateway.verify_binding = verify_member
+    result = await service.handle(
+        text='绑定 10086 938421',
+        group_id='group-1',
+        user_id='binder',
+        message_id='message-1',
+    )
+
+    assert result.reply == '绑定成功：会员 10086（IDC TXT Customer）'
+    assert '\u202e' not in result.reply
+
+
+@pytest.mark.asyncio
 async def test_binding_attempts_are_rate_limited_before_gateway_call(tmp_path):
     service, gateway = await _service(tmp_path, bind_attempts_per_10_minutes=1)
 

@@ -8,6 +8,7 @@ import os
 import socket
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
@@ -475,7 +476,10 @@ class IDCQueryConfigService:
     def _limited_text(value: Any, limit: int) -> str:
         if not isinstance(value, str):
             return ''
-        return ''.join(character for character in value if ord(character) >= 32 and ord(character) != 127)[:limit]
+        sanitized = ''.join(
+            ' ' if unicodedata.category(character) in {'Cc', 'Cf', 'Cs'} else character for character in value
+        )
+        return ' '.join(sanitized.split())[:limit]
 
     @staticmethod
     def _validate_base_url(value: Any) -> str:
@@ -485,7 +489,7 @@ class IDCQueryConfigService:
         if not base_url:
             return ''
         if len(base_url) > MAX_BASE_URL_LENGTH or any(
-            character.isspace() or ord(character) < 32 or ord(character) == 127 for character in base_url
+            character.isspace() or unicodedata.category(character) in {'Cc', 'Cf', 'Cs'} for character in base_url
         ):
             raise IDCQueryConfigValidationError('Gateway URL is invalid.')
 
@@ -511,7 +515,7 @@ class IDCQueryConfigService:
         if not isinstance(value, str):
             raise IDCQueryConfigValidationError('Service token must be a string.')
         token = value.strip()
-        if len(token) > MAX_TOKEN_LENGTH or any(ord(character) < 32 or ord(character) == 127 for character in token):
+        if len(token) > MAX_TOKEN_LENGTH or any(not 33 <= ord(character) <= 126 for character in token):
             raise IDCQueryConfigValidationError('Service token is invalid.')
         return token
 

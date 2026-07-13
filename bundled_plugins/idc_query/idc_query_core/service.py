@@ -224,16 +224,24 @@ class IDCQueryService:
             verification_code=command.arguments['verification_code'],
             request_id=message_id,
         )
-        member_id = str(verified.get('member_id') or '').strip()
-        if member_id != requested_member_id:
+        raw_member_id = verified.get('member_id')
+        if not isinstance(raw_member_id, str) or raw_member_id.strip() != raw_member_id:
             raise GatewayError('绑定验证结果异常，请联系管理员检查 IDC 查询网关。')
-        member_name = str(verified.get('member_name') or '')
-        await self.store.put(
+        if raw_member_id != requested_member_id:
+            raise GatewayError('绑定验证结果异常，请联系管理员检查 IDC 查询网关。')
+        raw_member_name = verified.get('member_name', '')
+        if raw_member_name is None:
+            raw_member_name = ''
+        if not isinstance(raw_member_name, str):
+            raise GatewayError('绑定验证结果异常，请联系管理员检查 IDC 查询网关。')
+        binding = await self.store.put(
             group_id=group_id,
-            member_id=member_id,
+            member_id=raw_member_id,
             bound_by=user_id,
-            member_name=member_name,
+            member_name=raw_member_name,
         )
+        member_id = binding.member_id
+        member_name = binding.member_name
         display_name = f'（{member_name}）' if member_name else ''
         return _OperationResult(
             HandleResult(True, f'绑定成功：会员 {member_id}{display_name}'),

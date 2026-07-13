@@ -46,6 +46,22 @@ async def test_binding_store_removes_bindings(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_binding_store_sanitizes_invisible_member_name_characters(tmp_path):
+    store = JsonBindingStore(tmp_path / 'bindings.json')
+    await store.load()
+
+    binding = await store.put(
+        group_id='group-1',
+        member_id='member-1',
+        bound_by='user-1',
+        member_name=' Example\r\nIDC\u202eTXT ',
+    )
+
+    assert binding.member_name == 'Example IDC TXT'
+    assert '\u202e' not in binding.member_name
+
+
+@pytest.mark.asyncio
 async def test_binding_store_recovers_corrupted_primary_from_committed_backup(tmp_path):
     path = tmp_path / 'bindings.json'
     store = JsonBindingStore(path)
