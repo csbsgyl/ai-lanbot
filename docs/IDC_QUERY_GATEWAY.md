@@ -53,6 +53,15 @@ member IDs. These runtime counters reset when the QQ bot process restarts. The
 status endpoint accepts user-login authentication only and is intentionally
 unavailable to API keys and MCP.
 
+The **Overview** tab aggregates fixed, secret-free readiness codes for the QQ
+bot, event transport, Plugin Runtime, bundled IDC plugin, gateway settings,
+TLS, optional service token, and recent activity. This check reads local state
+only: it does not contact the gateway or invoke any binding or query endpoint.
+Its response omits the gateway URL, App ID, credentials, internal paths,
+runtime errors, message content, and QQ identities. The readiness endpoint
+also requires a user login token and is intentionally unavailable to API keys
+and MCP.
+
 The configuration page also controls bot-side per-member limits for normal
 queries and binding attempts. These limits protect the bot and gateway from a
 single noisy QQ member; they are defense in depth and do not replace

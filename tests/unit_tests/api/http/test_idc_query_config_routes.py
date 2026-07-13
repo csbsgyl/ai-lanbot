@@ -98,6 +98,19 @@ async def idc_config_route_client():
             'generated_at': '2026-07-13T10:05:00+00:00',
         }
     )
+    app.idc_readiness_service = Mock()
+    app.idc_readiness_service.get_readiness = AsyncMock(
+        return_value={
+            'status': 'attention',
+            'checks': [
+                {'id': 'qq_bot', 'status': 'pass', 'code': 'enabled'},
+                {'id': 'idc_activity', 'status': 'warn', 'code': 'none'},
+            ],
+            'last_qq_event_at': '2026-07-13T10:05:00+00:00',
+            'last_idc_operation_at': None,
+            'generated_at': '2026-07-13T10:06:00+00:00',
+        }
+    )
 
     quart_app = quart.Quart(__name__)
     router = SystemRouterGroup(app, quart_app)
@@ -114,6 +127,7 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     audit_response = await client.get('/api/v1/system/idc-query/audit')
     bindings_response = await client.get('/api/v1/system/idc-query/bindings')
     test_response = await client.post('/api/v1/system/idc-query/test', json={})
+    readiness_response = await client.get('/api/v1/system/idc-query/readiness')
     qq_status_response = await client.get('/api/v1/system/qqofficial/status')
 
     assert get_response.status_code == 401
@@ -121,6 +135,7 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     assert audit_response.status_code == 401
     assert bindings_response.status_code == 401
     assert test_response.status_code == 401
+    assert readiness_response.status_code == 401
     assert qq_status_response.status_code == 401
 
 
@@ -159,12 +174,59 @@ async def test_idc_config_routes_reject_api_key_authentication(idc_config_route_
     assert test_response.status_code == 401
     app.idc_query_config_service.test_connection.assert_not_awaited()
 
+    readiness_response = await client.get(
+        '/api/v1/system/idc-query/readiness',
+        headers={'X-API-Key': 'automation-key'},
+    )
+    assert readiness_response.status_code == 401
+    app.idc_readiness_service.get_readiness.assert_not_awaited()
+
     qq_status_response = await client.get(
         '/api/v1/system/qqofficial/status',
         headers={'X-API-Key': 'automation-key'},
     )
     assert qq_status_response.status_code == 401
     app.qqofficial_status_service.get_status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_idc_readiness_route_uses_user_login_and_returns_sanitized_summary(
+    idc_config_route_client,
+):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/idc-query/readiness',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 200
+    response_data = (await response.get_json())['data']
+    assert response_data['status'] == 'attention'
+    assert response_data['checks'][0] == {'id': 'qq_bot', 'status': 'pass', 'code': 'enabled'}
+    assert response_data['last_qq_event_at'] == '2026-07-13T10:05:00+00:00'
+    assert 'token' not in response_data
+    assert 'base_url' not in response_data
+    app.idc_readiness_service.get_readiness.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_idc_readiness_route_does_not_expose_runtime_errors(idc_config_route_client):
+    client, app = idc_config_route_client
+    app.idc_readiness_service.get_readiness.side_effect = RuntimeError(
+        'service token loaded from /private/idc/config.env'
+    )
+
+    response = await client.get(
+        '/api/v1/system/idc-query/readiness',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 500
+    assert (await response.get_json())['msg'] == 'Failed to read IDC query readiness.'
+    response_text = await response.get_data(as_text=True)
+    assert 'service token' not in response_text
+    assert '/private/idc' not in response_text
 
 
 @pytest.mark.asyncio

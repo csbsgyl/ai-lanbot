@@ -500,6 +500,50 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     return fulfillJson(route, state.idcQueryConfig);
   }
 
+  if (path === '/api/v1/system/idc-query/readiness') {
+    const gatewayConfigured = state.idcQueryConfig.configured;
+    const tlsVerified = state.idcQueryConfig.verify_tls;
+    const tokenConfigured = state.idcQueryConfig.token_configured;
+    const hasWarning = !tlsVerified || !tokenConfigured;
+    return fulfillJson(route, {
+      status: !gatewayConfigured
+        ? 'not_ready'
+        : hasWarning
+          ? 'attention'
+          : 'ready',
+      checks: [
+        { id: 'qq_bot', status: 'pass', code: 'enabled' },
+        { id: 'qq_callback', status: 'pass', code: 'ready' },
+        { id: 'qq_activity', status: 'pass', code: 'received' },
+        { id: 'plugin_runtime', status: 'pass', code: 'connected' },
+        { id: 'idc_plugin', status: 'pass', code: 'initialized' },
+        {
+          id: 'gateway_config',
+          status: gatewayConfigured ? 'pass' : 'fail',
+          code: gatewayConfigured ? 'configured' : 'not_configured',
+        },
+        {
+          id: 'gateway_tls',
+          status: gatewayConfigured && tlsVerified ? 'pass' : 'warn',
+          code: gatewayConfigured
+            ? tlsVerified
+              ? 'verified'
+              : 'verification_disabled'
+            : 'unavailable',
+        },
+        {
+          id: 'gateway_auth',
+          status: tokenConfigured ? 'pass' : 'warn',
+          code: tokenConfigured ? 'configured' : 'optional',
+        },
+        { id: 'idc_activity', status: 'pass', code: 'recorded' },
+      ],
+      last_qq_event_at: '2026-07-13T10:05:00+00:00',
+      last_idc_operation_at: '2026-07-12T10:00:00+00:00',
+      generated_at: '2026-07-13T10:06:00+00:00',
+    });
+  }
+
   if (path === '/api/v1/system/idc-query/test' && method === 'POST') {
     const payload = parseJsonBody(route);
     return fulfillJson(route, {

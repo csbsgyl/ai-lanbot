@@ -379,6 +379,58 @@ export interface ApiRespIDCQueryConfig {
   bind_attempts_per_10_minutes: number;
 }
 
+export type IDCReadinessStatus = 'ready' | 'attention' | 'not_ready';
+
+export type IDCReadinessCheckStatus = 'pass' | 'warn' | 'fail';
+
+export type IDCReadinessCheckId =
+  | 'qq_bot'
+  | 'qq_callback'
+  | 'qq_activity'
+  | 'plugin_runtime'
+  | 'idc_plugin'
+  | 'gateway_config'
+  | 'gateway_tls'
+  | 'gateway_auth'
+  | 'idc_activity';
+
+export type IDCReadinessCheckCode =
+  | 'unavailable'
+  | 'enabled'
+  | 'not_configured'
+  | 'disabled'
+  | 'ready'
+  | 'websocket_mode'
+  | 'conflict'
+  | 'received'
+  | 'none'
+  | 'connected'
+  | 'disconnected'
+  | 'not_loaded'
+  | 'initialized'
+  | 'not_initialized'
+  | 'configured'
+  | 'invalid'
+  | 'verified'
+  | 'plaintext'
+  | 'verification_disabled'
+  | 'optional'
+  | 'recorded';
+
+export interface IDCReadinessCheck {
+  id: IDCReadinessCheckId;
+  status: IDCReadinessCheckStatus;
+  code: IDCReadinessCheckCode;
+}
+
+export interface ApiRespIDCReadiness {
+  status: IDCReadinessStatus;
+  checks: IDCReadinessCheck[];
+  last_qq_event_at: string | null;
+  last_idc_operation_at: string | null;
+  generated_at: string;
+}
+
 export interface UpdateIDCQueryConfig {
   base_url?: string;
   token?: string;

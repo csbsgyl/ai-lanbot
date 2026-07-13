@@ -155,6 +155,14 @@ test.describe('authenticated app shell', () => {
     await expect(
       dialog.getByRole('heading', { name: 'IDC Query' }),
     ).toBeVisible();
+    await expect(dialog.getByText('Not ready', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Production readiness')).toBeVisible();
+    await expect(dialog.getByText('Plugin Runtime')).toBeVisible();
+    await expect(
+      dialog.getByText('Required configuration is missing.'),
+    ).toBeVisible();
+
+    await dialog.getByRole('tab', { name: 'Configuration' }).click();
     await expect(dialog.getByText('Gateway not configured')).toBeVisible();
 
     await dialog.getByRole('tab', { name: 'QQ callback' }).click();
@@ -194,6 +202,12 @@ test.describe('authenticated app shell', () => {
     await expect(dialog.getByLabel('Queries per member / minute')).toHaveValue(
       '25',
     );
+
+    await dialog.getByRole('tab', { name: 'Overview' }).click();
+    await expect(dialog.getByText('Ready', { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByText('The IDC query plugin initialized successfully.'),
+    ).toBeVisible();
 
     await dialog.getByRole('tab', { name: 'Group bindings' }).click();
     await expect(dialog.getByText('Example IDC Customer')).toBeVisible();
@@ -235,6 +249,10 @@ test.describe('authenticated app shell', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('Production readiness')).toBeVisible();
+    await expect(dialog.getByText('Not ready', { exact: true })).toBeVisible();
+
+    await dialog.getByRole('tab', { name: 'Configuration' }).click();
     await expect(dialog.getByLabel('Gateway URL')).toBeVisible();
     await expect(dialog.getByLabel('Request timeout')).toBeVisible();
     await expect(dialog.getByLabel('Service token')).toBeVisible();

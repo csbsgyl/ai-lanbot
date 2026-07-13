@@ -20,6 +20,7 @@ import {
   ApiRespSystemInfo,
   ApiRespSystemUpdate,
   ApiRespIDCQueryConfig,
+  ApiRespIDCReadiness,
   ApiRespIDCQueryConnectionTest,
   ApiRespQQOfficialStatus,
   ApiRespIDCQueryAudit,
@@ -1026,6 +1027,10 @@ export class BackendClient extends BaseHttpClient {
     config: UpdateIDCQueryConfig,
   ): Promise<ApiRespIDCQueryConfig> {
     return this.put('/api/v1/system/idc-query', config);
+  }
+
+  public getIDCReadiness(): Promise<ApiRespIDCReadiness> {
+    return this.get('/api/v1/system/idc-query/readiness');
   }
 
   public testIDCQueryConnection(

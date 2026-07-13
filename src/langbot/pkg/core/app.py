@@ -35,6 +35,7 @@ from ..api.http.service import monitoring as monitoring_service
 from ..api.http.service import skill as skill_service
 from ..api.http.service import maintenance as maintenance_service
 from ..api.http.service import idc_query_config as idc_query_config_service
+from ..api.http.service import idc_readiness as idc_readiness_service
 from ..api.http.service import qqofficial_status as qqofficial_status_service
 from ..api.http.service import system_update as system_update_service
 from ..discover import engine as discover_engine
@@ -169,6 +170,8 @@ class Application:
     maintenance_service: maintenance_service.MaintenanceService = None
 
     idc_query_config_service: idc_query_config_service.IDCQueryConfigService = None
+
+    idc_readiness_service: idc_readiness_service.IDCReadinessService = None
 
     qqofficial_status_service: qqofficial_status_service.QQOfficialStatusService = None
 

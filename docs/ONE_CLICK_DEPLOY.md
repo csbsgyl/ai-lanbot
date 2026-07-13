@@ -104,6 +104,18 @@ Secrets, query tokens, messages, QQ group IDs, or member IDs. The diagnostics
 API requires a user login token and rejects API-key and MCP authentication.
 Counters are in-memory operational data and reset when the QQ bot restarts.
 
+Open **Settings > IDC Query > Overview** for a read-only production readiness
+summary across the enabled QQ bot, callback or WebSocket transport, Plugin
+Runtime, bundled IDC plugin, gateway configuration, TLS, optional gateway
+token, and recent QQ/IDC activity. Refreshing the summary only reads local
+runtime state and does not contact the query gateway or invoke a customer
+query. A missing QQ bot, callback conflict, disconnected runtime, unloaded
+plugin, or missing gateway URL blocks readiness; missing real traffic and an
+optional gateway token are warnings. The summary contains only fixed status
+codes and normalized timestamps. It never returns the gateway URL, App ID,
+credentials, internal paths, runtime errors, messages, group IDs, or member
+IDs, and its endpoint accepts administrator login tokens only.
+
 ## Optional Environment Variables
 
 ```bash

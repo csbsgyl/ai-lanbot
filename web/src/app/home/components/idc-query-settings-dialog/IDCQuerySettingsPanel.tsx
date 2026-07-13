@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Cable,
   CheckCircle2,
+  ClipboardCheck,
   Link2,
   Loader2,
   RefreshCw,
@@ -25,6 +26,7 @@ import { backendClient } from '@/app/infra/http';
 import type {
   ApiRespIDCQueryConfig,
   ApiRespIDCQueryConnectionTest,
+  ApiRespIDCReadiness,
   ApiRespQQOfficialStatus,
   IDCQueryAuditEvent,
   IDCQueryBinding,
@@ -35,6 +37,7 @@ import {
 } from '@/app/home/components/settings-dialog/panel-layout';
 import IDCQueryAuditTable from './IDCQueryAuditTable';
 import IDCQueryBindingTable from './IDCQueryBindingTable';
+import IDCReadinessPanel from './IDCReadinessPanel';
 import QQCallbackStatusPanel from './QQCallbackStatusPanel';
 
 interface IDCQuerySettingsPanelProps {
@@ -53,7 +56,7 @@ export default function IDCQuerySettingsPanel({
   active,
 }: IDCQuerySettingsPanelProps) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState('configuration');
+  const [activeTab, setActiveTab] = useState('readiness');
   const [baseUrl, setBaseUrl] = useState('');
   const [token, setToken] = useState('');
   const [timeoutSeconds, setTimeoutSeconds] = useState('8');
@@ -85,6 +88,9 @@ export default function IDCQuerySettingsPanel({
   );
   const [qqStatusLoading, setQQStatusLoading] = useState(false);
   const [qqStatusError, setQQStatusError] = useState('');
+  const [readiness, setReadiness] = useState<ApiRespIDCReadiness | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessError, setReadinessError] = useState('');
 
   const invalidateConnectionResult = useCallback(() => {
     connectionTestSequence.current += 1;
@@ -162,6 +168,18 @@ export default function IDCQuerySettingsPanel({
     }
   }, []);
 
+  const loadReadiness = useCallback(async () => {
+    setReadinessLoading(true);
+    setReadinessError('');
+    try {
+      setReadiness(await backendClient.getIDCReadiness());
+    } catch (loadError) {
+      setReadinessError(getErrorMessage(loadError));
+    } finally {
+      setReadinessLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (active) loadConfig();
   }, [active, loadConfig]);
@@ -177,6 +195,10 @@ export default function IDCQuerySettingsPanel({
   useEffect(() => {
     if (active && activeTab === 'callback') loadQQStatus();
   }, [active, activeTab, loadQQStatus]);
+
+  useEffect(() => {
+    if (active && activeTab === 'readiness') loadReadiness();
+  }, [active, activeTab, loadReadiness]);
 
   const saveConfig = async () => {
     const parsedTimeout = Number(timeoutSeconds);
@@ -283,6 +305,16 @@ export default function IDCQuerySettingsPanel({
       <PanelToolbar>
         <TabsList>
           <TabsTrigger
+            value="readiness"
+            aria-label={t('idcQuery.tabs.readiness')}
+            title={t('idcQuery.tabs.readiness')}
+          >
+            <ClipboardCheck />
+            <span className="hidden sm:inline">
+              {t('idcQuery.tabs.readiness')}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger
             value="configuration"
             aria-label={t('idcQuery.tabs.configuration')}
             title={t('idcQuery.tabs.configuration')}
@@ -381,28 +413,36 @@ export default function IDCQuerySettingsPanel({
                 ? loadQQStatus
                 : activeTab === 'bindings'
                   ? loadBindings
-                  : loadAudit
+                  : activeTab === 'audit'
+                    ? loadAudit
+                    : loadReadiness
             }
             disabled={
               activeTab === 'callback'
                 ? qqStatusLoading
                 : activeTab === 'bindings'
                   ? bindingsLoading
-                  : auditLoading
+                  : activeTab === 'audit'
+                    ? auditLoading
+                    : readinessLoading
             }
             aria-label={t(
               activeTab === 'callback'
                 ? 'idcQuery.callback.refresh'
                 : activeTab === 'bindings'
                   ? 'idcQuery.bindings.refresh'
-                  : 'idcQuery.audit.refresh',
+                  : activeTab === 'audit'
+                    ? 'idcQuery.audit.refresh'
+                    : 'idcQuery.readiness.refresh',
             )}
             title={t(
               activeTab === 'callback'
                 ? 'idcQuery.callback.refresh'
                 : activeTab === 'bindings'
                   ? 'idcQuery.bindings.refresh'
-                  : 'idcQuery.audit.refresh',
+                  : activeTab === 'audit'
+                    ? 'idcQuery.audit.refresh'
+                    : 'idcQuery.readiness.refresh',
             )}
           >
             <RefreshCw
@@ -412,7 +452,9 @@ export default function IDCQuerySettingsPanel({
                     ? qqStatusLoading
                     : activeTab === 'bindings'
                       ? bindingsLoading
-                      : auditLoading
+                      : activeTab === 'audit'
+                        ? auditLoading
+                        : readinessLoading
                 )
                   ? 'animate-spin'
                   : ''
@@ -421,6 +463,18 @@ export default function IDCQuerySettingsPanel({
           </Button>
         )}
       </PanelToolbar>
+
+      <TabsContent
+        value="readiness"
+        className="mt-0 min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+      >
+        <IDCReadinessPanel
+          readiness={readiness}
+          loading={readinessLoading}
+          error={readinessError}
+          onRetry={loadReadiness}
+        />
+      </TabsContent>
 
       <TabsContent
         value="configuration"
