@@ -1600,6 +1600,33 @@ const jaJP = {
     saveError: 'IDC クエリ設定を保存できませんでした',
     invalidTimeout: 'タイムアウトは 1〜120 秒で指定してください',
     invalidRateLimit: '頻度上限は 1〜1000 の整数で指定してください',
+    connection: {
+      test: '接続テスト',
+      testing: 'テスト中...',
+      urlRequired: '先にゲートウェイ URL を入力してください',
+      testError: '接続テストに失敗しました',
+      notAvailable: 'なし',
+      details: 'HTTP {{httpStatus}} · {{latency}} ms · TLS {{tls}}',
+      authRejected: 'ゲートウェイがサービストークンを拒否しました。',
+      authNotVerified:
+        'ネットワーク接続は正常です。トークンは実際の業務リクエストで検証されます。',
+      status: {
+        reachable: 'ゲートウェイに接続できます',
+        authentication_failed: 'ゲートウェイ認証に失敗しました',
+        redirected: 'ゲートウェイがリダイレクトを返しました',
+        gateway_error: 'ゲートウェイがサーバーエラーを返しました',
+        timeout: 'ゲートウェイ接続がタイムアウトしました',
+        tls_error: 'TLS 証明書の検証に失敗しました',
+        dns_error: 'ゲートウェイのホスト名を解決できません',
+        connection_failed: 'ゲートウェイに接続できません',
+      },
+      tls: {
+        verified: '検証済み',
+        disabled: '無効',
+        not_applicable: '対象外',
+        failed: '失敗',
+      },
+    },
     bindings: {
       refresh: 'グループ連携を更新',
       loading: 'グループ連携を読み込み中...',

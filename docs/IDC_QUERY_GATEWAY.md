@@ -35,6 +35,16 @@ service token itself is never returned. Configuration is atomically written to
 `data/idc-query/config.env` with owner-only permissions, and the plugin detects
 file replacement before processing the next query.
 
+The same page provides a connection diagnostic. It sends a non-mutating `HEAD`
+request to the configured gateway base URL with redirects disabled and reports
+only categorized DNS, connection, TLS, timeout, HTTP, and authentication
+results. It never calls a binding or query endpoint, returns a response body,
+or exposes the URL, token, or low-level exception. A non-401 response proves
+network reachability but does not prove that the token is authorized for a
+specific customer query; that remains the gateway's responsibility on the
+first real business request. The diagnostic endpoint accepts user-login
+authentication only and is intentionally unavailable to API keys and MCP.
+
 The configuration page also controls bot-side per-member limits for normal
 queries and binding attempts. These limits protect the bot and gateway from a
 single noisy QQ member; they are defense in depth and do not replace

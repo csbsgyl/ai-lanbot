@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   Activity,
   AlertTriangle,
+  Cable,
   CheckCircle2,
   Link2,
   Loader2,
@@ -22,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { backendClient } from '@/app/infra/http';
 import type {
   ApiRespIDCQueryConfig,
+  ApiRespIDCQueryConnectionTest,
   IDCQueryAuditEvent,
   IDCQueryBinding,
 } from '@/app/infra/entities/api';
@@ -61,6 +63,10 @@ export default function IDCQuerySettingsPanel({
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionResult, setConnectionResult] =
+    useState<ApiRespIDCQueryConnectionTest | null>(null);
+  const connectionTestSequence = useRef(0);
   const [error, setError] = useState('');
   const [auditEvents, setAuditEvents] = useState<IDCQueryAuditEvent[]>([]);
   const [auditGeneratedAt, setAuditGeneratedAt] = useState('');
@@ -72,18 +78,27 @@ export default function IDCQuerySettingsPanel({
   const [bindingsLoading, setBindingsLoading] = useState(false);
   const [bindingsError, setBindingsError] = useState('');
 
-  const applyConfig = useCallback((config: ApiRespIDCQueryConfig) => {
-    setBaseUrl(config.base_url);
-    setTimeoutSeconds(String(config.timeout_seconds));
-    setRequestsPerMinute(String(config.requests_per_minute));
-    setBindAttemptsPer10Minutes(String(config.bind_attempts_per_10_minutes));
-    setVerifyTls(config.verify_tls);
-    setConfigured(config.configured);
-    setTokenConfigured(config.token_configured);
-    setToken('');
-    setClearToken(false);
-    setLoaded(true);
+  const invalidateConnectionResult = useCallback(() => {
+    connectionTestSequence.current += 1;
+    setConnectionResult(null);
   }, []);
+
+  const applyConfig = useCallback(
+    (config: ApiRespIDCQueryConfig) => {
+      setBaseUrl(config.base_url);
+      setTimeoutSeconds(String(config.timeout_seconds));
+      setRequestsPerMinute(String(config.requests_per_minute));
+      setBindAttemptsPer10Minutes(String(config.bind_attempts_per_10_minutes));
+      setVerifyTls(config.verify_tls);
+      setConfigured(config.configured);
+      setTokenConfigured(config.token_configured);
+      setToken('');
+      setClearToken(false);
+      invalidateConnectionResult();
+      setLoaded(true);
+    },
+    [invalidateConnectionResult],
+  );
 
   const loadConfig = useCallback(async () => {
     setLoaded(false);
@@ -183,7 +198,46 @@ export default function IDCQuerySettingsPanel({
     }
   };
 
+  const testConnection = async () => {
+    const parsedTimeout = Number(timeoutSeconds);
+    if (!baseUrl.trim()) {
+      toast.error(t('idcQuery.connection.urlRequired'));
+      return;
+    }
+    if (
+      !Number.isFinite(parsedTimeout) ||
+      parsedTimeout < 1 ||
+      parsedTimeout > 120
+    ) {
+      toast.error(t('idcQuery.invalidTimeout'));
+      return;
+    }
+
+    setTestingConnection(true);
+    setConnectionResult(null);
+    const testSequence = ++connectionTestSequence.current;
+    try {
+      const result = await backendClient.testIDCQueryConnection({
+        base_url: baseUrl.trim(),
+        timeout_seconds: parsedTimeout,
+        verify_tls: verifyTls,
+        clear_token: clearToken,
+        ...(token.trim() ? { token: token.trim() } : {}),
+      });
+      if (connectionTestSequence.current === testSequence) {
+        setConnectionResult(result);
+      }
+    } catch (testError) {
+      toast.error(
+        `${t('idcQuery.connection.testError')}: ${getErrorMessage(testError)}`,
+      );
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
   const handleTokenAction = () => {
+    invalidateConnectionResult();
     if (clearToken) {
       setClearToken(false);
       return;
@@ -243,9 +297,31 @@ export default function IDCQuerySettingsPanel({
             <Button
               type="button"
               variant="outline"
+              size="sm"
+              onClick={testConnection}
+              disabled={!loaded || loading || saving || testingConnection}
+              aria-label={t('idcQuery.connection.test')}
+              title={t('idcQuery.connection.test')}
+            >
+              {testingConnection ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Cable />
+              )}
+              <span className="hidden lg:inline">
+                {t(
+                  testingConnection
+                    ? 'idcQuery.connection.testing'
+                    : 'idcQuery.connection.test',
+                )}
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               size="icon"
               onClick={loadConfig}
-              disabled={loading || saving}
+              disabled={loading || saving || testingConnection}
               aria-label={t('idcQuery.refresh')}
               title={t('idcQuery.refresh')}
             >
@@ -255,7 +331,7 @@ export default function IDCQuerySettingsPanel({
               type="submit"
               form="idc-query-settings-form"
               size="sm"
-              disabled={!loaded || loading || saving}
+              disabled={!loaded || loading || saving || testingConnection}
             >
               {saving ? <Loader2 className="animate-spin" /> : <Save />}
               {saving ? t('idcQuery.saving') : t('idcQuery.save')}
@@ -332,12 +408,58 @@ export default function IDCQuerySettingsPanel({
                     id="idc-query-base-url"
                     type="url"
                     value={baseUrl}
-                    onChange={(event) => setBaseUrl(event.target.value)}
+                    onChange={(event) => {
+                      setBaseUrl(event.target.value);
+                      invalidateConnectionResult();
+                    }}
                     placeholder={t('idcQuery.gatewayUrlPlaceholder')}
                     maxLength={2048}
                     autoComplete="url"
                   />
                 </div>
+
+                {connectionResult && (
+                  <div
+                    className={`flex items-start gap-3 border-l-2 px-3 py-2 ${
+                      connectionResult.status === 'reachable'
+                        ? 'border-green-600 bg-green-500/5'
+                        : 'border-destructive bg-destructive/5'
+                    }`}
+                  >
+                    {connectionResult.status === 'reachable' ? (
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" />
+                    ) : (
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                    )}
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-medium">
+                        {t(
+                          `idcQuery.connection.status.${connectionResult.status}`,
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t('idcQuery.connection.details', {
+                          httpStatus:
+                            connectionResult.http_status ??
+                            t('idcQuery.connection.notAvailable'),
+                          latency: connectionResult.latency_ms,
+                          tls: t(
+                            `idcQuery.connection.tls.${connectionResult.tls_status}`,
+                          ),
+                        })}
+                      </p>
+                      {connectionResult.token_configured && (
+                        <p className="text-xs text-muted-foreground">
+                          {t(
+                            connectionResult.auth_status === 'rejected'
+                              ? 'idcQuery.connection.authRejected'
+                              : 'idcQuery.connection.authNotVerified',
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="idc-query-timeout">
@@ -351,9 +473,10 @@ export default function IDCQuerySettingsPanel({
                       max={120}
                       step="0.5"
                       value={timeoutSeconds}
-                      onChange={(event) =>
-                        setTimeoutSeconds(event.target.value)
-                      }
+                      onChange={(event) => {
+                        setTimeoutSeconds(event.target.value);
+                        invalidateConnectionResult();
+                      }}
                       className="tabular-nums"
                     />
                     <span className="shrink-0 text-sm text-muted-foreground">
@@ -431,6 +554,7 @@ export default function IDCQuerySettingsPanel({
                       onChange={(event) => {
                         setToken(event.target.value);
                         setClearToken(false);
+                        invalidateConnectionResult();
                       }}
                       placeholder={t(
                         tokenConfigured
@@ -468,7 +592,10 @@ export default function IDCQuerySettingsPanel({
                   <Switch
                     id="idc-query-verify-tls"
                     checked={verifyTls}
-                    onCheckedChange={setVerifyTls}
+                    onCheckedChange={(checked) => {
+                      setVerifyTls(checked);
+                      invalidateConnectionResult();
+                    }}
                   />
                 </div>
                 {!verifyTls && (

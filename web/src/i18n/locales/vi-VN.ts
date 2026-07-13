@@ -1597,6 +1597,33 @@ const viVN = {
     saveError: 'Không thể lưu cài đặt truy vấn IDC',
     invalidTimeout: 'Thời gian chờ phải từ 1 đến 120 giây',
     invalidRateLimit: 'Giới hạn phải là số nguyên từ 1 đến 1000',
+    connection: {
+      test: 'Kiểm tra kết nối',
+      testing: 'Đang kiểm tra...',
+      urlRequired: 'Hãy nhập URL cổng trước khi kiểm tra',
+      testError: 'Kiểm tra kết nối thất bại',
+      notAvailable: 'Không có',
+      details: 'HTTP {{httpStatus}} · {{latency}} ms · TLS {{tls}}',
+      authRejected: 'Cổng đã từ chối mã thông báo dịch vụ.',
+      authNotVerified:
+        'Kết nối mạng hoạt động; mã thông báo sẽ được xác minh bằng yêu cầu nghiệp vụ thực tế.',
+      status: {
+        reachable: 'Có thể kết nối tới cổng',
+        authentication_failed: 'Xác thực cổng thất bại',
+        redirected: 'Cổng trả về chuyển hướng',
+        gateway_error: 'Cổng trả về lỗi máy chủ',
+        timeout: 'Kết nối tới cổng hết thời gian',
+        tls_error: 'Xác minh TLS thất bại',
+        dns_error: 'Không thể phân giải tên máy chủ cổng',
+        connection_failed: 'Không thể kết nối tới cổng',
+      },
+      tls: {
+        verified: 'đã xác minh',
+        disabled: 'đã tắt',
+        not_applicable: 'không áp dụng',
+        failed: 'thất bại',
+      },
+    },
     bindings: {
       refresh: 'Làm mới liên kết',
       loading: 'Đang tải các nhóm đã liên kết...',

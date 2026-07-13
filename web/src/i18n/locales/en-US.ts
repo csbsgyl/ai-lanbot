@@ -1594,6 +1594,33 @@ const enUS = {
     saveError: 'Failed to save IDC query settings',
     invalidTimeout: 'Timeout must be between 1 and 120 seconds',
     invalidRateLimit: 'Rate limits must be whole numbers between 1 and 1000',
+    connection: {
+      test: 'Test connection',
+      testing: 'Testing...',
+      urlRequired: 'Enter a gateway URL before testing',
+      testError: 'Connection test failed',
+      notAvailable: 'N/A',
+      details: 'HTTP {{httpStatus}} · {{latency}} ms · TLS {{tls}}',
+      authRejected: 'The gateway rejected the service token.',
+      authNotVerified:
+        'Network access works; the service token will be fully verified by a business request.',
+      status: {
+        reachable: 'Gateway is reachable',
+        authentication_failed: 'Gateway authentication failed',
+        redirected: 'Gateway returned a redirect',
+        gateway_error: 'Gateway returned a server error',
+        timeout: 'Gateway connection timed out',
+        tls_error: 'TLS verification failed',
+        dns_error: 'Gateway hostname could not be resolved',
+        connection_failed: 'Gateway connection failed',
+      },
+      tls: {
+        verified: 'verified',
+        disabled: 'disabled',
+        not_applicable: 'not applicable',
+        failed: 'failed',
+      },
+    },
     bindings: {
       refresh: 'Refresh bindings',
       loading: 'Loading group bindings...',

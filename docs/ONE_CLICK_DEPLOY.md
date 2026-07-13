@@ -90,8 +90,10 @@ compatibility and for other webhook adapters.
 QQ currently permits callback ports `80`, `443`, `8080`, and `8443`; HTTPS is
 required. The bundled QQ Official adapter handles the `op=13` callback
 validation, verifies signed event callbacks, and acknowledges accepted events
-with `op=12`. New QQ Official bots default to Webhook mode. WebSocket mode
-remains available as an explicit adapter setting.
+with `op=12`. Signed callbacks outside the accepted time window are rejected,
+and recently seen event IDs are acknowledged without being processed twice.
+New QQ Official bots default to Webhook mode. WebSocket mode remains available
+as an explicit adapter setting.
 
 ## Optional Environment Variables
 
@@ -127,8 +129,10 @@ administrator, open **Settings > IDC Query** to configure the gateway URL,
 service token, request timeout, and TLS verification. Saved changes are loaded
 by the plugin on the next query without restarting the containers. The same
 page configures per-member query and binding-attempt limits and shows the most
-recent IDC operation outcomes. Its **Group bindings** tab shows a read-only,
-masked inventory of active QQ group bindings.
+recent IDC operation outcomes. Its connection test checks DNS, network, TLS,
+timeout, and the gateway's HTTP response without invoking a customer query.
+Its **Group bindings** tab shows a read-only, masked inventory of active QQ
+group bindings.
 
 The WebUI stores these values in `docker/data/idc-query/config.env` with
 owner-only permissions and preserves them on later one-click upgrades. The GET

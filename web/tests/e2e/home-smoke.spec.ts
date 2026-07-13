@@ -166,6 +166,13 @@ test.describe('authenticated app shell', () => {
       .getByLabel('Binding attempts per member / 10 minutes')
       .fill('3');
     await dialog.getByLabel('Service token').fill('playwright-secret-token');
+    await dialog.getByRole('button', { name: 'Test connection' }).click();
+    await expect(dialog.getByText('Gateway is reachable')).toBeVisible();
+    await expect(
+      dialog.getByText(
+        'Network access works; the service token will be fully verified by a business request.',
+      ),
+    ).toBeVisible();
     await dialog.getByRole('button', { name: 'Save' }).click();
 
     await expect(page.getByText('IDC query settings saved')).toBeVisible();

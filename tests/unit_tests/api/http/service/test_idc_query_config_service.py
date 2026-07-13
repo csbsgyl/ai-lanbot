@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import stat
@@ -122,6 +123,138 @@ async def test_invalid_updates_are_rejected_without_changing_file(
 async def test_non_object_request_is_rejected(config_service: IDCQueryConfigService):
     with pytest.raises(IDCQueryConfigValidationError, match='JSON object'):
         await config_service.update_config(None)
+
+
+@pytest.mark.asyncio
+async def test_connection_probe_uses_unsaved_form_values_without_following_redirects(
+    config_service: IDCQueryConfigService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await config_service.update_config(
+        {'base_url': 'https://saved.example.com', 'token': 'saved-token', 'verify_tls': True}
+    )
+    saved_config = config_service.config_path.read_bytes()
+    captured = {}
+
+    class FakeResponse:
+        status = 204
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            captured['session'] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def head(self, url, **kwargs):
+            captured['url'] = url
+            captured['request'] = kwargs
+            return FakeResponse()
+
+    monkeypatch.setattr(idc_query_config.aiohttp, 'ClientSession', FakeSession)
+
+    result = await config_service.test_connection(
+        {
+            'base_url': 'https://pending.example.com/',
+            'token': 'pending-token',
+            'timeout_seconds': 30,
+            'verify_tls': False,
+        }
+    )
+
+    assert result['status'] == 'reachable'
+    assert result['reachable'] is True
+    assert result['http_status'] == 204
+    assert result['tls_status'] == 'disabled'
+    assert result['auth_status'] == 'not_verified'
+    assert captured['url'] == 'https://pending.example.com'
+    assert captured['session']['trust_env'] is False
+    assert captured['session']['timeout'].total == 15
+    assert captured['request']['allow_redirects'] is False
+    assert captured['request']['ssl'] is False
+    assert captured['request']['headers']['Authorization'] == 'Bearer pending-token'
+    assert config_service.config_path.read_bytes() == saved_config
+
+
+@pytest.mark.parametrize('http_status', [401, 403])
+@pytest.mark.asyncio
+async def test_connection_probe_classifies_authentication_failure(
+    config_service: IDCQueryConfigService,
+    monkeypatch: pytest.MonkeyPatch,
+    http_status: int,
+):
+    class FakeResponse:
+        status = http_status
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakeSession:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def head(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(idc_query_config.aiohttp, 'ClientSession', FakeSession)
+
+    result = await config_service.test_connection({'base_url': 'https://query.example.com'})
+
+    assert result['status'] == 'authentication_failed'
+    assert result['reachable'] is True
+    assert result['auth_status'] == 'rejected'
+
+
+@pytest.mark.asyncio
+async def test_connection_probe_returns_sanitized_timeout(
+    config_service: IDCQueryConfigService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class TimeoutSession:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        def head(self, *_args, **_kwargs):
+            raise asyncio.TimeoutError('private gateway address')
+
+    monkeypatch.setattr(idc_query_config.aiohttp, 'ClientSession', TimeoutSession)
+
+    result = await config_service.test_connection({'base_url': 'https://query.example.com'})
+
+    assert result['status'] == 'timeout'
+    assert result['reachable'] is False
+    assert result['http_status'] is None
+    assert 'private gateway address' not in json.dumps(result)
+
+
+@pytest.mark.asyncio
+async def test_connection_probe_requires_a_gateway_url(config_service: IDCQueryConfigService):
+    with pytest.raises(IDCQueryConfigValidationError, match='not configured'):
+        await config_service.test_connection({})
 
 
 @pytest.mark.asyncio

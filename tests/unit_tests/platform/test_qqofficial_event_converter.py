@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -26,7 +27,8 @@ def _qq_secret_seed(secret: str) -> bytes:
     return seed[:32].encode()
 
 
-def _signed_request(body: bytes, secret: str, timestamp: str = '1725442341'):
+def _signed_request(body: bytes, secret: str, timestamp: str | None = None):
+    timestamp = timestamp or str(int(time.time()))
     private_key = ed25519.Ed25519PrivateKey.from_private_bytes(_qq_secret_seed(secret))
     signature = private_key.sign(timestamp.encode() + body).hex()
     return SimpleNamespace(
@@ -222,6 +224,26 @@ async def test_qq_webhook_rejects_unsigned_event():
 
 
 @pytest.mark.asyncio
+async def test_qq_webhook_rejects_stale_signed_event():
+    body = json.dumps({'op': 0, 't': 'GROUP_AT_MESSAGE_CREATE', 'd': {'id': 'message-stale'}}).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    stale_timestamp = str(int(time.time()) - client.CALLBACK_SIGNATURE_MAX_AGE_SECONDS - 1)
+
+    response, status = await client.handle_unified_webhook(
+        _signed_request(body, 'test-secret', stale_timestamp)
+    )
+
+    assert status == 401
+    assert response == {'error': 'invalid callback signature'}
+
+
+@pytest.mark.asyncio
 async def test_qq_webhook_acknowledges_signed_event_before_dispatch():
     body = json.dumps(
         {
@@ -251,6 +273,62 @@ async def test_qq_webhook_acknowledges_signed_event_before_dispatch():
     assert status == 200
     assert response == {'op': 12}
     client._handle_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_acknowledges_duplicate_event_without_dispatching_twice():
+    body = json.dumps(
+        {
+            'id': 'event-duplicate',
+            'op': 0,
+            't': 'GROUP_AT_MESSAGE_CREATE',
+            'd': {
+                'id': 'message-duplicate',
+                'content': '查余额',
+                'group_openid': 'group-openid',
+                'author': {'member_openid': 'member-openid'},
+            },
+        },
+        separators=(',', ':'),
+    ).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client._handle_message = AsyncMock()
+
+    first_response = await client.handle_unified_webhook(_signed_request(body, 'test-secret'))
+    second_response = await client.handle_unified_webhook(_signed_request(body, 'test-secret'))
+    await asyncio.sleep(0)
+
+    assert first_response == ({'op': 12}, 200)
+    assert second_response == ({'op': 12}, 200)
+    client._handle_message.assert_awaited_once()
+
+
+def test_qq_webhook_dedup_window_expires_and_remains_time_ordered(monkeypatch):
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    current_time = 1000.0
+    monkeypatch.setattr(
+        'langbot.libs.qq_official_api.api.time.monotonic',
+        lambda: current_time,
+    )
+    payload = {'id': 'event-1', 'd': {}}
+
+    assert client._is_duplicate_webhook_event(payload) is False
+    current_time += client.CALLBACK_DEDUP_TTL_SECONDS - 1
+    assert client._is_duplicate_webhook_event(payload) is True
+    current_time += client.CALLBACK_DEDUP_TTL_SECONDS + 1
+    assert client._is_duplicate_webhook_event(payload) is False
 
 
 @pytest.mark.asyncio

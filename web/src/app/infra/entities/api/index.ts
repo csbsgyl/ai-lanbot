@@ -195,19 +195,11 @@ export interface Bot {
 }
 
 export type RoutingRuleOperator =
-  | 'eq'
-  | 'neq'
-  | 'contains'
-  | 'not_contains'
-  | 'starts_with'
-  | 'regex';
+  'eq' | 'neq' | 'contains' | 'not_contains' | 'starts_with' | 'regex';
 
 export interface PipelineRoutingRule {
   type:
-    | 'launcher_type'
-    | 'launcher_id'
-    | 'message_content'
-    | 'message_has_element';
+    'launcher_type' | 'launcher_id' | 'message_content' | 'message_has_element';
   operator: RoutingRuleOperator;
   value: string;
   pipeline_uuid: string;
@@ -360,12 +352,7 @@ export interface ApiRespSystemInfo {
 }
 
 export type SystemUpdateState =
-  | 'idle'
-  | 'queued'
-  | 'checking'
-  | 'deploying'
-  | 'success'
-  | 'failed';
+  'idle' | 'queued' | 'checking' | 'deploying' | 'success' | 'failed';
 
 export interface ApiRespSystemUpdate {
   enabled: boolean;
@@ -400,6 +387,35 @@ export interface UpdateIDCQueryConfig {
   verify_tls?: boolean;
   requests_per_minute?: number;
   bind_attempts_per_10_minutes?: number;
+}
+
+export type IDCQueryConnectionStatus =
+  | 'reachable'
+  | 'authentication_failed'
+  | 'redirected'
+  | 'gateway_error'
+  | 'timeout'
+  | 'tls_error'
+  | 'dns_error'
+  | 'connection_failed';
+
+export interface ApiRespIDCQueryConnectionTest {
+  status: IDCQueryConnectionStatus;
+  reachable: boolean;
+  http_status: number | null;
+  latency_ms: number;
+  tls_status: 'verified' | 'disabled' | 'not_applicable' | 'failed';
+  auth_status: 'rejected' | 'not_verified';
+  token_configured: boolean;
+  checked_at: string;
+}
+
+export interface TestIDCQueryConnection {
+  base_url?: string;
+  token?: string;
+  clear_token?: boolean;
+  timeout_seconds?: number;
+  verify_tls?: boolean;
 }
 
 export interface IDCQueryAuditEvent {

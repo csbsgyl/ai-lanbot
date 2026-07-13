@@ -96,6 +96,17 @@ class SystemRouterGroup(group.RouterGroup):
                 self.ap.logger.error(f'Failed to access IDC query configuration: {exc}')
                 return self.http_status(500, 500, 'Failed to save IDC query configuration.')
 
+        @self.route('/idc-query/test', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
+        async def _() -> str:
+            try:
+                payload = await quart.request.get_json(silent=True)
+                return self.success(data=await self.ap.idc_query_config_service.test_connection(payload))
+            except idc_query_config.IDCQueryConfigValidationError as exc:
+                return self.http_status(400, 400, str(exc))
+            except (OSError, UnicodeError) as exc:
+                self.ap.logger.error(f'Failed to test IDC query gateway: {exc}')
+                return self.http_status(500, 500, 'Failed to test IDC query gateway.')
+
         @self.route('/idc-query/audit', methods=['GET'], auth_type=group.AuthType.USER_TOKEN)
         async def _() -> str:
             try:

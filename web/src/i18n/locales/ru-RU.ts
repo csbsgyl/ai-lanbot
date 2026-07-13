@@ -1606,6 +1606,33 @@ const ruRU = {
     saveError: 'Не удалось сохранить настройки IDC-запросов',
     invalidTimeout: 'Тайм-аут должен быть от 1 до 120 секунд',
     invalidRateLimit: 'Лимиты должны быть целыми числами от 1 до 1000',
+    connection: {
+      test: 'Проверить подключение',
+      testing: 'Проверка...',
+      urlRequired: 'Сначала укажите URL шлюза',
+      testError: 'Ошибка проверки подключения',
+      notAvailable: 'Н/Д',
+      details: 'HTTP {{httpStatus}} · {{latency}} мс · TLS {{tls}}',
+      authRejected: 'Шлюз отклонил сервисный токен.',
+      authNotVerified:
+        'Сеть доступна; токен будет проверен реальным бизнес-запросом.',
+      status: {
+        reachable: 'Шлюз доступен',
+        authentication_failed: 'Ошибка аутентификации шлюза',
+        redirected: 'Шлюз вернул перенаправление',
+        gateway_error: 'Шлюз вернул ошибку сервера',
+        timeout: 'Время подключения к шлюзу истекло',
+        tls_error: 'Ошибка проверки TLS',
+        dns_error: 'Не удалось разрешить имя шлюза',
+        connection_failed: 'Не удалось подключиться к шлюзу',
+      },
+      tls: {
+        verified: 'проверен',
+        disabled: 'отключён',
+        not_applicable: 'не применяется',
+        failed: 'ошибка',
+      },
+    },
     bindings: {
       refresh: 'Обновить привязки',
       loading: 'Загрузка привязок групп...',

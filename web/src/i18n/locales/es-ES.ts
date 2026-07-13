@@ -1630,6 +1630,33 @@ const esES = {
     saveError: 'No se pudo guardar la configuración de consultas IDC',
     invalidTimeout: 'El tiempo de espera debe estar entre 1 y 120 segundos',
     invalidRateLimit: 'Los límites deben ser enteros entre 1 y 1000',
+    connection: {
+      test: 'Probar conexión',
+      testing: 'Probando...',
+      urlRequired: 'Introduce una URL de pasarela antes de probar',
+      testError: 'Falló la prueba de conexión',
+      notAvailable: 'N/D',
+      details: 'HTTP {{httpStatus}} · {{latency}} ms · TLS {{tls}}',
+      authRejected: 'La pasarela rechazó el token de servicio.',
+      authNotVerified:
+        'La red funciona; el token se verificará con una solicitud de negocio.',
+      status: {
+        reachable: 'La pasarela está disponible',
+        authentication_failed: 'Falló la autenticación de la pasarela',
+        redirected: 'La pasarela devolvió una redirección',
+        gateway_error: 'La pasarela devolvió un error del servidor',
+        timeout: 'La conexión con la pasarela agotó el tiempo',
+        tls_error: 'Falló la verificación TLS',
+        dns_error: 'No se pudo resolver el host de la pasarela',
+        connection_failed: 'No se pudo conectar con la pasarela',
+      },
+      tls: {
+        verified: 'verificado',
+        disabled: 'desactivado',
+        not_applicable: 'no aplicable',
+        failed: 'falló',
+      },
+    },
     bindings: {
       refresh: 'Actualizar vínculos',
       loading: 'Cargando grupos vinculados...',

@@ -1,6 +1,7 @@
 import re
 import time
 import asyncio
+from collections import OrderedDict
 from quart import request
 import httpx
 from quart import Quart
@@ -14,6 +15,10 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 
 class QQOfficialClient:
+    CALLBACK_SIGNATURE_MAX_AGE_SECONDS = 300
+    CALLBACK_DEDUP_TTL_SECONDS = 600
+    CALLBACK_DEDUP_MAX_EVENTS = 4096
+
     def __init__(self, secret: str, token: str, app_id: str, logger: None, unified_mode: bool = False):
         self.unified_mode = unified_mode
         self.app = Quart(__name__)
@@ -38,6 +43,7 @@ class QQOfficialClient:
         self._msg_seq_counter = 0
         self._token_refresh_task: Optional[asyncio.Task] = None
         self._webhook_tasks: set[asyncio.Task] = set()
+        self._seen_webhook_events: OrderedDict[str, float] = OrderedDict()
 
     async def check_access_token(self):
         """检查access_token是否存在"""
@@ -116,6 +122,9 @@ class QQOfficialClient:
                 return {'error': 'invalid callback signature'}, 401
 
             if payload.get('op') == 0:
+                if self._is_duplicate_webhook_event(payload):
+                    await self.logger.info('Ignored duplicate QQ Official webhook event')
+                    return {'op': 12}, 200
                 message_data = await self.get_message(payload)
                 if message_data:
                     event = QQOfficialEvent.from_payload(message_data)
@@ -541,13 +550,44 @@ class QQOfficialClient:
             return False
 
         try:
+            if len(timestamp) > 20:
+                return False
+            signed_at = int(timestamp)
+            if abs(time.time() - signed_at) > self.CALLBACK_SIGNATURE_MAX_AGE_SECONDS:
+                return False
             signature = bytes.fromhex(signature_hex)
             seed = await self.repeat_seed(self.secret)
             private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
             private_key.public_key().verify(signature, timestamp.encode() + body)
-        except (InvalidSignature, ValueError):
+        except (InvalidSignature, OverflowError, ValueError):
             return False
         return True
+
+    def _is_duplicate_webhook_event(self, payload: dict[str, Any]) -> bool:
+        event_data = payload.get('d')
+        event_id = payload.get('id')
+        if not event_id and isinstance(event_data, dict):
+            event_id = event_data.get('id')
+        if not isinstance(event_id, str) or not event_id:
+            return False
+
+        now = time.monotonic()
+        expires_before = now - self.CALLBACK_DEDUP_TTL_SECONDS
+        while self._seen_webhook_events:
+            oldest_id, oldest_seen_at = next(iter(self._seen_webhook_events.items()))
+            if oldest_seen_at >= expires_before:
+                break
+            self._seen_webhook_events.pop(oldest_id, None)
+
+        seen_at = self._seen_webhook_events.pop(event_id, None)
+        if seen_at is not None and seen_at >= expires_before:
+            self._seen_webhook_events[event_id] = now
+            return True
+
+        self._seen_webhook_events[event_id] = now
+        while len(self._seen_webhook_events) > self.CALLBACK_DEDUP_MAX_EVENTS:
+            self._seen_webhook_events.popitem(last=False)
+        return False
 
     # ---- WebSocket Gateway ----
     # Reference: https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html

@@ -1570,6 +1570,33 @@ const thTH = {
     saveError: 'บันทึกการตั้งค่าการค้นหา IDC ไม่สำเร็จ',
     invalidTimeout: 'เวลาหมดอายุต้องอยู่ระหว่าง 1 ถึง 120 วินาที',
     invalidRateLimit: 'ขีดจำกัดต้องเป็นจำนวนเต็มระหว่าง 1 ถึง 1000',
+    connection: {
+      test: 'ทดสอบการเชื่อมต่อ',
+      testing: 'กำลังทดสอบ...',
+      urlRequired: 'กรุณาป้อน URL เกตเวย์ก่อนทดสอบ',
+      testError: 'ทดสอบการเชื่อมต่อล้มเหลว',
+      notAvailable: 'ไม่มี',
+      details: 'HTTP {{httpStatus}} · {{latency}} ms · TLS {{tls}}',
+      authRejected: 'เกตเวย์ปฏิเสธโทเค็นบริการ',
+      authNotVerified:
+        'เครือข่ายใช้งานได้ โทเค็นจะถูกตรวจสอบด้วยคำขอทางธุรกิจจริง',
+      status: {
+        reachable: 'เชื่อมต่อเกตเวย์ได้',
+        authentication_failed: 'การยืนยันตัวตนเกตเวย์ล้มเหลว',
+        redirected: 'เกตเวย์ส่งการเปลี่ยนเส้นทาง',
+        gateway_error: 'เกตเวย์ส่งข้อผิดพลาดเซิร์ฟเวอร์',
+        timeout: 'หมดเวลาการเชื่อมต่อเกตเวย์',
+        tls_error: 'การตรวจสอบ TLS ล้มเหลว',
+        dns_error: 'ไม่สามารถแปลงชื่อโฮสต์เกตเวย์ได้',
+        connection_failed: 'เชื่อมต่อเกตเวย์ไม่สำเร็จ',
+      },
+      tls: {
+        verified: 'ตรวจสอบแล้ว',
+        disabled: 'ปิดอยู่',
+        not_applicable: 'ไม่เกี่ยวข้อง',
+        failed: 'ล้มเหลว',
+      },
+    },
     bindings: {
       refresh: 'รีเฟรชการผูกบัญชี',
       loading: 'กำลังโหลดกลุ่มที่ผูกบัญชี...',

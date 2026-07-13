@@ -5,10 +5,14 @@ import datetime
 import json
 import math
 import os
+import socket
 import tempfile
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
+
+import aiohttp
 
 from ....utils import paths
 
@@ -33,6 +37,7 @@ AUDIT_OUTCOMES = {'success', 'denied', 'rate_limited', 'gateway_error', 'interna
 DEFAULT_BINDINGS_LIMIT = 200
 MAX_BINDINGS_LIMIT = 500
 MAX_BINDINGS_FILE_BYTES = 5 * 1024 * 1024
+MAX_CONNECTION_TEST_TIMEOUT_SECONDS = 15.0
 
 
 class IDCQueryConfigValidationError(ValueError):
@@ -119,6 +124,132 @@ class IDCQueryConfigService:
             }
             self._write_config(config)
             return self._public_config(config)
+
+    async def test_connection(self, payload: Any) -> dict[str, Any]:
+        """Probe gateway reachability without invoking a business endpoint."""
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise IDCQueryConfigValidationError('Request body must be a JSON object.')
+
+        allowed_fields = {'base_url', 'token', 'clear_token', 'timeout_seconds', 'verify_tls'}
+        if set(payload) - allowed_fields:
+            raise IDCQueryConfigValidationError('Request contains unsupported fields.')
+
+        config = self._read_config()
+        if 'base_url' in payload:
+            config['base_url'] = self._validate_base_url(payload['base_url'])
+        if 'timeout_seconds' in payload:
+            config['timeout_seconds'] = self._validate_timeout(payload['timeout_seconds'])
+        if 'verify_tls' in payload:
+            config['verify_tls'] = self._validate_boolean(payload['verify_tls'], 'verify_tls')
+
+        clear_token = self._validate_boolean(payload.get('clear_token', False), 'clear_token')
+        replacement_token = payload.get('token')
+        if replacement_token is not None:
+            replacement_token = self._validate_token(replacement_token)
+        if clear_token and replacement_token:
+            raise IDCQueryConfigValidationError('Token cannot be replaced and cleared at the same time.')
+        if clear_token:
+            config['token'] = ''
+        elif replacement_token:
+            config['token'] = replacement_token
+
+        if not config['base_url']:
+            raise IDCQueryConfigValidationError('Gateway URL is not configured.')
+        return await self._probe_gateway(config)
+
+    @staticmethod
+    async def _probe_gateway(config: dict[str, Any]) -> dict[str, Any]:
+        base_url = str(config['base_url'])
+        parsed = urlsplit(base_url)
+        verify_tls = bool(config['verify_tls'])
+        timeout_seconds = min(float(config['timeout_seconds']), MAX_CONNECTION_TEST_TIMEOUT_SECONDS)
+        headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'ai-lanbot-idc-diagnostic/1.0',
+        }
+        if config['token']:
+            headers['Authorization'] = f'Bearer {config["token"]}'
+
+        started_at = time.monotonic()
+        token_configured = bool(config['token'])
+        tls_status = 'not_applicable'
+        if parsed.scheme.lower() == 'https':
+            tls_status = 'verified' if verify_tls else 'disabled'
+
+        timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
+                async with session.head(
+                    base_url,
+                    headers=headers,
+                    allow_redirects=False,
+                    ssl=verify_tls,
+                ) as response:
+                    http_status = response.status
+        except (asyncio.TimeoutError, aiohttp.ServerTimeoutError):
+            return IDCQueryConfigService._connection_result(
+                'timeout', False, started_at, tls_status, token_configured=token_configured
+            )
+        except (aiohttp.ClientConnectorCertificateError, aiohttp.ClientSSLError):
+            return IDCQueryConfigService._connection_result(
+                'tls_error', False, started_at, 'failed', token_configured=token_configured
+            )
+        except aiohttp.ClientConnectorError as exc:
+            status = 'dns_error' if isinstance(exc.os_error, socket.gaierror) else 'connection_failed'
+            return IDCQueryConfigService._connection_result(
+                status, False, started_at, tls_status, token_configured=token_configured
+            )
+        except aiohttp.ClientError:
+            return IDCQueryConfigService._connection_result(
+                'connection_failed', False, started_at, tls_status, token_configured=token_configured
+            )
+
+        if http_status in {401, 403}:
+            status = 'authentication_failed'
+            auth_status = 'rejected'
+        elif 300 <= http_status < 400:
+            status = 'redirected'
+            auth_status = 'not_verified'
+        elif http_status >= 500:
+            status = 'gateway_error'
+            auth_status = 'not_verified'
+        else:
+            status = 'reachable'
+            auth_status = 'not_verified'
+
+        return IDCQueryConfigService._connection_result(
+            status,
+            True,
+            started_at,
+            tls_status,
+            http_status=http_status,
+            auth_status=auth_status,
+            token_configured=token_configured,
+        )
+
+    @staticmethod
+    def _connection_result(
+        status: str,
+        reachable: bool,
+        started_at: float,
+        tls_status: str,
+        *,
+        http_status: int | None = None,
+        auth_status: str = 'not_verified',
+        token_configured: bool = False,
+    ) -> dict[str, Any]:
+        return {
+            'status': status,
+            'reachable': reachable,
+            'http_status': http_status,
+            'latency_ms': max(0, min(round((time.monotonic() - started_at) * 1000), 120_000)),
+            'tls_status': tls_status,
+            'auth_status': auth_status,
+            'token_configured': token_configured,
+            'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
 
     def _read_config(self) -> dict[str, Any]:
         values: dict[str, str] = {}

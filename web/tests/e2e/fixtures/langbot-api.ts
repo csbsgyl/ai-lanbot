@@ -500,6 +500,22 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     return fulfillJson(route, state.idcQueryConfig);
   }
 
+  if (path === '/api/v1/system/idc-query/test' && method === 'POST') {
+    const payload = parseJsonBody(route);
+    return fulfillJson(route, {
+      status: 'reachable',
+      reachable: true,
+      http_status: 204,
+      latency_ms: 18,
+      tls_status: payload.verify_tls === false ? 'disabled' : 'verified',
+      auth_status: 'not_verified',
+      token_configured:
+        Boolean(String(payload.token || '').trim()) ||
+        state.idcQueryConfig.token_configured,
+      checked_at: '2026-07-13T10:00:00+00:00',
+    });
+  }
+
   if (path === '/api/v1/system/idc-query/audit') {
     return fulfillJson(route, {
       events: state.idcQueryAuditEvents,

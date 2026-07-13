@@ -39,6 +39,18 @@ async def idc_config_route_client():
             'bind_attempts_per_10_minutes': 4,
         }
     )
+    app.idc_query_config_service.test_connection = AsyncMock(
+        return_value={
+            'status': 'reachable',
+            'reachable': True,
+            'http_status': 204,
+            'latency_ms': 18,
+            'tls_status': 'verified',
+            'auth_status': 'not_verified',
+            'token_configured': True,
+            'checked_at': '2026-07-13T10:00:00+00:00',
+        }
+    )
     app.idc_query_config_service.get_audit_events = AsyncMock(
         return_value={
             'events': [
@@ -89,11 +101,13 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     put_response = await client.put('/api/v1/system/idc-query', json={})
     audit_response = await client.get('/api/v1/system/idc-query/audit')
     bindings_response = await client.get('/api/v1/system/idc-query/bindings')
+    test_response = await client.post('/api/v1/system/idc-query/test', json={})
 
     assert get_response.status_code == 401
     assert put_response.status_code == 401
     assert audit_response.status_code == 401
     assert bindings_response.status_code == 401
+    assert test_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -123,6 +137,14 @@ async def test_idc_config_routes_reject_api_key_authentication(idc_config_route_
     assert bindings_response.status_code == 401
     app.idc_query_config_service.get_bindings.assert_not_awaited()
 
+    test_response = await client.post(
+        '/api/v1/system/idc-query/test',
+        headers={'X-API-Key': 'automation-key'},
+        json={'token': 'must-not-be-accepted'},
+    )
+    assert test_response.status_code == 401
+    app.idc_query_config_service.test_connection.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 async def test_idc_config_routes_read_and_update_settings(idc_config_route_client):
@@ -147,6 +169,30 @@ async def test_idc_config_routes_read_and_update_settings(idc_config_route_clien
     assert response_data['base_url'] == 'https://new-query.example.com'
     assert 'token' not in response_data
     app.idc_query_config_service.update_config.assert_awaited_once_with(payload)
+
+
+@pytest.mark.asyncio
+async def test_idc_connection_test_uses_user_login_and_returns_sanitized_result(idc_config_route_client):
+    client, app = idc_config_route_client
+    payload = {
+        'base_url': 'https://pending.example.com',
+        'token': 'replacement-token',
+        'timeout_seconds': 10,
+        'verify_tls': True,
+    }
+
+    response = await client.post(
+        '/api/v1/system/idc-query/test',
+        headers={'Authorization': 'Bearer test-token'},
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    response_data = (await response.get_json())['data']
+    assert response_data['status'] == 'reachable'
+    assert 'token' not in response_data
+    assert 'base_url' not in response_data
+    app.idc_query_config_service.test_connection.assert_awaited_once_with(payload)
 
 
 @pytest.mark.asyncio
