@@ -16,6 +16,9 @@ SOURCE_MODE="${LANBOT_SOURCE_MODE:-archive}"
 COMPOSE_PROFILES="${LANBOT_COMPOSE_PROFILES:-}"
 HTTP_PORT="${LANBOT_HTTP_PORT:-5300}"
 PUBLIC_URL="${LANBOT_PUBLIC_URL:-https://idc.csbsgyl.com}"
+AUTO_BACKUP_BEFORE_UPDATE="${LANBOT_AUTO_BACKUP_BEFORE_UPDATE:-true}"
+BACKUP_KEEP="${LANBOT_BACKUP_KEEP:-5}"
+BACKUP_DIR="${LANBOT_BACKUP_DIR:-}"
 COMPOSE_PROJECT="${LANBOT_COMPOSE_PROJECT_NAME:-docker}"
 LANGBOT_CONTAINER_NAME="${LANBOT_CONTAINER_NAME:-langbot}"
 PLUGIN_RUNTIME_CONTAINER_NAME="${LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME:-langbot_plugin_runtime}"
@@ -25,6 +28,7 @@ REVERSE_PORT_MAPPING="${LANBOT_REVERSE_PORT_MAPPING:-2280-2285:2280-2285}"
 TARGET_REVISION="${LANBOT_TARGET_REVISION:-}"
 IMAGE_WAIT_SECONDS="${LANBOT_IMAGE_WAIT_SECONDS:-0}"
 UPDATE_ENABLED="false"
+DEPLOY_LOCK_FD=""
 HOST_UPDATER_PATH="/usr/local/libexec/ai-lanbot-host-update"
 
 if [ "${EUID:-$(id -u)}" -eq 0 ]; then
@@ -116,6 +120,7 @@ acquire_deployment_lock() {
   fi
   chmod 600 "$lock_file"
   flock -n 9 || die "Another deployment or managed update is already running for ${INSTALL_DIR}."
+  DEPLOY_LOCK_FD="9"
 }
 
 compose_cmd() {
@@ -261,6 +266,10 @@ load_existing_deployment_settings() {
   reuse_existing_deployment_setting "LANBOT_COMPOSE_PROJECT_NAME" "COMPOSE_PROJECT_NAME" "COMPOSE_PROJECT"
   reuse_existing_deployment_setting "LANBOT_HTTP_PORT" "LANGBOT_HTTP_PORT" "HTTP_PORT"
   reuse_existing_deployment_setting "LANBOT_PUBLIC_URL" "LANBOT_PUBLIC_URL" "PUBLIC_URL"
+  reuse_existing_deployment_setting \
+    "LANBOT_AUTO_BACKUP_BEFORE_UPDATE" "LANBOT_AUTO_BACKUP_BEFORE_UPDATE" "AUTO_BACKUP_BEFORE_UPDATE"
+  reuse_existing_deployment_setting "LANBOT_BACKUP_KEEP" "LANBOT_BACKUP_KEEP" "BACKUP_KEEP"
+  reuse_existing_deployment_setting "LANBOT_BACKUP_DIR" "LANBOT_BACKUP_DIR" "BACKUP_DIR"
   reuse_existing_deployment_setting "LANBOT_CONTAINER_NAME" "LANBOT_CONTAINER_NAME" "LANGBOT_CONTAINER_NAME"
   reuse_existing_deployment_setting \
     "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "PLUGIN_RUNTIME_CONTAINER_NAME"
@@ -284,6 +293,28 @@ validate_public_url() {
   PUBLIC_URL="${PUBLIC_URL%/}"
   if [[ ! "$PUBLIC_URL" =~ ^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:(80|443|8080|8443))?$ ]]; then
     die "LANBOT_PUBLIC_URL must be an HTTPS origin without a path, query, or fragment."
+  fi
+}
+
+validate_backup_settings() {
+  case "$AUTO_BACKUP_BEFORE_UPDATE" in
+    true|false) ;;
+    *) die "LANBOT_AUTO_BACKUP_BEFORE_UPDATE must be true or false." ;;
+  esac
+  case "$BACKUP_KEEP" in
+    ''|*[!0-9]*) die "LANBOT_BACKUP_KEEP must be an integer between 1 and 100." ;;
+  esac
+  if [ "$BACKUP_KEEP" -lt 1 ] || [ "$BACKUP_KEEP" -gt 100 ]; then
+    die "LANBOT_BACKUP_KEEP must be an integer between 1 and 100."
+  fi
+  if [ -n "$BACKUP_DIR" ]; then
+    case "$BACKUP_DIR" in
+      /*) ;;
+      *) die "LANBOT_BACKUP_DIR must be an absolute path." ;;
+    esac
+    case "$BACKUP_DIR" in
+      *$'\n'*|*$'\r'*) die "LANBOT_BACKUP_DIR must not contain line breaks." ;;
+    esac
   fi
 }
 
@@ -586,6 +617,60 @@ download_archive() {
   fi
 }
 
+download_revision_file() {
+  local relative_path="$1"
+  local destination="$2"
+  local source_ref="${TARGET_REVISION:-$REPO_BRANCH}"
+  local direct_url="https://raw.githubusercontent.com/${REPO_SLUG}/${source_ref}/${relative_path}"
+  local accel_url="${GITHUB_ACCELERATOR}/${direct_url}"
+
+  if ! curl -fL --retry 3 --connect-timeout 10 --max-time 120 --max-filesize 1048576 \
+    -o "$destination" "$direct_url"; then
+    curl -fL --retry 3 --connect-timeout 10 --max-time 120 --max-filesize 1048576 \
+      -o "$destination" "$accel_url"
+  fi
+}
+
+create_pre_update_backup() {
+  local installed_script="${INSTALL_DIR}/scripts/data-backup.sh"
+  local backup_script="$installed_script"
+  local temporary_script=""
+
+  [ "$AUTO_BACKUP_BEFORE_UPDATE" = "true" ] || {
+    log "Automatic pre-update backup is disabled."
+    return 0
+  }
+  is_managed_install_dir || return 0
+
+  if [ ! -f "$installed_script" ] || ! grep -q 'LANBOT_BACKUP_LOCK_FD' "$installed_script"; then
+    temporary_script="$(mktemp)"
+    if ! download_revision_file "scripts/data-backup.sh" "$temporary_script" \
+      || ! grep -q 'LANBOT_BACKUP_LOCK_FD' "$temporary_script" \
+      || ! bash -n "$temporary_script"; then
+      [ -z "$temporary_script" ] || rm -f "$temporary_script"
+      die "Could not prepare the target revision's data backup tool; the existing deployment was not changed."
+    fi
+    backup_script="$temporary_script"
+  fi
+
+  log "Creating a consistent pre-update data backup."
+  if [ -n "$DEPLOY_LOCK_FD" ]; then
+    if ! LANBOT_BACKUP_LOCK_FD="$DEPLOY_LOCK_FD" \
+      LANBOT_BACKUP_KEEP="$BACKUP_KEEP" \
+      LANBOT_BACKUP_DIR="$BACKUP_DIR" \
+      bash "$backup_script" create "$INSTALL_DIR"; then
+      [ -z "$temporary_script" ] || rm -f "$temporary_script"
+      die "Pre-update data backup failed; the existing deployment was not changed."
+    fi
+  elif ! LANBOT_BACKUP_KEEP="$BACKUP_KEEP" \
+    LANBOT_BACKUP_DIR="$BACKUP_DIR" \
+    bash "$backup_script" create "$INSTALL_DIR"; then
+    [ -z "$temporary_script" ] || rm -f "$temporary_script"
+    die "Pre-update data backup failed; the existing deployment was not changed."
+  fi
+  [ -z "$temporary_script" ] || rm -f "$temporary_script"
+}
+
 restore_staged_install() {
   local backup_root="$1"
   local backup_dir="$2"
@@ -836,6 +921,9 @@ write_env() {
   set_env_key "$env_file" "LANBOT_ENVIRONMENT" "$DEPLOY_ENVIRONMENT"
   set_env_key "$env_file" "LANGBOT_HTTP_PORT" "$HTTP_PORT"
   set_env_key "$env_file" "LANBOT_PUBLIC_URL" "$PUBLIC_URL"
+  set_env_key "$env_file" "LANBOT_AUTO_BACKUP_BEFORE_UPDATE" "$AUTO_BACKUP_BEFORE_UPDATE"
+  set_env_key "$env_file" "LANBOT_BACKUP_KEEP" "$BACKUP_KEEP"
+  set_env_key "$env_file" "LANBOT_BACKUP_DIR" "$BACKUP_DIR"
   set_env_key "$env_file" "LANGBOT_BOX_ROOT" "${INSTALL_DIR}/docker/data/box"
   set_env_key "$env_file" "LANBOT_CONTAINER_NAME" "$LANGBOT_CONTAINER_NAME"
   set_env_key "$env_file" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "$PLUGIN_RUNTIME_CONTAINER_NAME"
@@ -1018,6 +1106,11 @@ print_success_info() {
   else
     log "In-app updates: unavailable because the host updater could not be activated."
   fi
+  if [ "$AUTO_BACKUP_BEFORE_UPDATE" = "true" ]; then
+    log "Pre-update backups: enabled; keep ${BACKUP_KEEP} in ${BACKUP_DIR:-${INSTALL_DIR}-backups}."
+  else
+    log "Pre-update backups: disabled by LANBOT_AUTO_BACKUP_BEFORE_UPDATE."
+  fi
 
   if [ -n "$COMPOSE_PROFILES" ]; then
     log "Status: cd ${INSTALL_DIR}/docker && $(compose_cmd) --profile ${COMPOSE_PROFILES} ps"
@@ -1055,6 +1148,7 @@ main() {
     die "LANBOT_HTTP_PORT must be between 1 and 65535."
   fi
   validate_public_url
+  validate_backup_settings
   case "$IMAGE_WAIT_SECONDS" in
     ''|*[!0-9]*) die "LANBOT_IMAGE_WAIT_SECONDS must be a non-negative integer." ;;
   esac
@@ -1110,6 +1204,7 @@ main() {
     fi
   fi
 
+  create_pre_update_backup
   fetch_source
   install_bundled_plugins
   install_host_updater

@@ -48,6 +48,8 @@ The script also checks Docker image access automatically. By default it starts f
 - Prints the local URL, remote URL, first-time setup URL, login URL, and maintenance commands.
 - Prints the QQ callback reverse-proxy upstream and the configured public
   callback URL.
+- Creates a consistent local-data backup before an existing deployment changes
+  its managed source or starts the new version.
 - Installs a systemd path unit that accepts fixed update requests from the authenticated WebUI without mounting the host Docker socket into LangBot.
 
 ## In-App Updates
@@ -56,6 +58,10 @@ After the first deployment, open the update control beside the version in the
 application sidebar. It compares the deployed commit with `main`, then allows
 an authenticated administrator to request the update. The service restarts
 during installation and the same page reports progress when it reconnects.
+By default, the updater first stops only the currently running Compose
+services, creates and verifies a local-data snapshot, restarts the old version,
+and then installs the update. A backup or old-version health-check failure
+aborts the update before the managed source is replaced.
 
 The WebUI only writes `docker/data/update-request/request.json`. The separate
 status directory is mounted read-only in LangBot. A host-side systemd service
@@ -74,6 +80,14 @@ fallback remains available only for an operator-run one-click deployment.
 Both the WebUI check and host updater use the public Atom feed before falling
 back to the anonymous GitHub API, so an API rate-limit response does not by
 itself disable update checks.
+
+Operator-run one-click upgrades use the same pre-update backup path. The
+backup subprocess inherits and verifies the deployment lock, so no second
+deployment, restore, or backup can enter between the snapshot and source
+replacement. During the first upgrade from an older script, the
+backup tool from the resolved target revision is downloaded and syntax-checked
+before use. Operator runs retain the existing branch fallback when repository
+revision discovery is unavailable.
 
 ## Login After Deployment
 
@@ -171,6 +185,9 @@ LANBOT_INSTALL_DIR=/opt/ai-lanbot
 LANBOT_BRANCH=main
 LANBOT_HTTP_PORT=5300
 LANBOT_PUBLIC_URL=https://idc.csbsgyl.com
+LANBOT_AUTO_BACKUP_BEFORE_UPDATE=true
+LANBOT_BACKUP_KEEP=5
+LANBOT_BACKUP_DIR=/opt/ai-lanbot-backups
 LANBOT_COMPOSE_PROFILES=all
 LANBOT_DEPLOY_MODE=image
 LANBOT_ALLOW_BUILD_FALLBACK=true
@@ -263,6 +280,13 @@ from 1 to 100 or `LANBOT_BACKUP_DIR` to an absolute external backup directory.
 Symbolic links are preserved for Box/Skill virtual environments, while archive
 members nested through a link and device, FIFO, or socket entries are rejected.
 
+Existing deployments run this snapshot automatically before both in-app and
+operator-run one-click updates. `LANBOT_AUTO_BACKUP_BEFORE_UPDATE=false`
+disables that guard only when another verified backup process is already in
+place. The three backup settings are persisted in `docker/.env` and retained
+by later managed updates. A failed automatic backup leaves the existing source
+and version unchanged.
+
 Restore a snapshot into the currently installed application version:
 
 ```bash
@@ -286,6 +310,8 @@ This snapshot covers local `docker/data`, including the default SQLite
 database, local storage, IDC credentials/state, plugins, and local vector/Box
 data. PostgreSQL, S3, remote vector databases, and other external services must
 be backed up with their native tools; this script does not claim to snapshot
-them. Restore refuses a snapshot configured for an external database unless an
+them. Automatic pre-update snapshots therefore do not replace native backups
+for external services. Restore refuses a snapshot configured for an external
+database unless an
 operator explicitly sets `LANBOT_ALLOW_EXTERNAL_RESTORE=true` after completing
 the native database restore.

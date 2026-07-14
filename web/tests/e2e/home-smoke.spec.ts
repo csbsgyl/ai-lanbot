@@ -111,6 +111,9 @@ test.describe('authenticated app shell', () => {
     await expect(
       page.getByRole('heading', { name: 'Install update?' }),
     ).toBeVisible();
+    await expect(page.getByRole('alertdialog')).toContainText(
+      'A local-data backup is created by default',
+    );
     await page
       .getByRole('alertdialog')
       .getByRole('button', { name: 'Update now' })

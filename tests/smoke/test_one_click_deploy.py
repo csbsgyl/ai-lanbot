@@ -19,6 +19,9 @@ CONFIG_KEYS = (
     'install_dir',
     'http_port',
     'public_url',
+    'auto_backup',
+    'backup_keep',
+    'backup_dir',
     'compose_project',
     'langbot_container',
     'plugin_container',
@@ -45,6 +48,9 @@ printf '%s\n' \
   "$INSTALL_DIR" \
   "$HTTP_PORT" \
   "$PUBLIC_URL" \
+  "$AUTO_BACKUP_BEFORE_UPDATE" \
+  "$BACKUP_KEEP" \
+  "$BACKUP_DIR" \
   "$COMPOSE_PROJECT" \
   "$LANGBOT_CONTAINER_NAME" \
   "$PLUGIN_RUNTIME_CONTAINER_NAME" \
@@ -99,6 +105,9 @@ def test_production_is_the_only_default_deployment():
         'install_dir': config['install_dir'],
         'http_port': '5300',
         'public_url': 'https://idc.csbsgyl.com',
+        'auto_backup': 'true',
+        'backup_keep': '5',
+        'backup_dir': '',
         'compose_project': 'docker',
         'langbot_container': 'langbot',
         'plugin_container': 'langbot_plugin_runtime',
@@ -125,6 +134,9 @@ def test_repeat_deployment_reuses_resource_settings_and_respects_explicit_overri
                 'COMPOSE_PROJECT_NAME=existing-project',
                 'LANGBOT_HTTP_PORT=6300',
                 'LANBOT_PUBLIC_URL=https://existing.example.com',
+                'LANBOT_AUTO_BACKUP_BEFORE_UPDATE=false',
+                'LANBOT_BACKUP_KEEP=9',
+                'LANBOT_BACKUP_DIR=/srv/ai-lanbot-backups',
                 'LANBOT_CONTAINER_NAME=existing-langbot',
                 'LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME=existing-plugin-runtime',
                 'LANBOT_BOX_CONTAINER_NAME=existing-box',
@@ -145,6 +157,9 @@ printf '%s\n' \
   "$COMPOSE_PROJECT" \
   "$HTTP_PORT" \
   "$PUBLIC_URL" \
+  "$AUTO_BACKUP_BEFORE_UPDATE" \
+  "$BACKUP_KEEP" \
+  "$BACKUP_DIR" \
   "$LANGBOT_CONTAINER_NAME" \
   "$PLUGIN_RUNTIME_CONTAINER_NAME" \
   "$BOX_CONTAINER_NAME" \
@@ -171,16 +186,22 @@ printf '%s\n' \
             **env,
             'LANBOT_HTTP_PORT': '7300',
             'LANBOT_PUBLIC_URL': 'https://override.example.com:8443',
+            'LANBOT_AUTO_BACKUP_BEFORE_UPDATE': 'true',
+            'LANBOT_BACKUP_KEEP': '3',
+            'LANBOT_BACKUP_DIR': '/mnt/ai-lanbot-backups',
             'LANBOT_CONTAINER_NAME': 'override-langbot',
             'LANBOT_COMPOSE_PROFILES': '',
         },
         text=True,
     ).stdout.splitlines()
 
-    assert reused[-10:] == [
+    assert reused[-13:] == [
         'existing-project',
         '6300',
         'https://existing.example.com',
+        'false',
+        '9',
+        '/srv/ai-lanbot-backups',
         'existing-langbot',
         'existing-plugin-runtime',
         'existing-box',
@@ -189,10 +210,13 @@ printf '%s\n' \
         'all',
         'git',
     ]
-    assert overridden[-10:] == [
+    assert overridden[-13:] == [
         'existing-project',
         '7300',
         'https://override.example.com:8443',
+        'true',
+        '3',
+        '/mnt/ai-lanbot-backups',
         'override-langbot',
         'existing-plugin-runtime',
         'existing-box',
@@ -245,6 +269,100 @@ if (PUBLIC_URL='https://bot.example.com:444'; validate_public_url); then exit 1;
     )
 
     assert result.stdout.splitlines() == ['https://bot.example.com']
+
+
+def test_backup_settings_reject_unsafe_or_out_of_range_values():
+    if BASH is None:
+        pytest.skip('bash is required to exercise the Linux deployment script')
+
+    command = r"""
+source "$1"
+AUTO_BACKUP_BEFORE_UPDATE=true
+BACKUP_KEEP=100
+BACKUP_DIR=/srv/ai-lanbot-backups
+validate_backup_settings
+if (AUTO_BACKUP_BEFORE_UPDATE=yes; validate_backup_settings); then exit 1; fi
+if (BACKUP_KEEP=0; validate_backup_settings); then exit 1; fi
+if (BACKUP_KEEP=101; validate_backup_settings); then exit 1; fi
+if (BACKUP_DIR=relative/backups; validate_backup_settings); then exit 1; fi
+"""
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout == ''
+
+
+def test_pre_update_backup_receives_persisted_settings_and_deployment_lock(tmp_path):
+    if BASH is None:
+        pytest.skip('bash is required to exercise the Linux deployment script')
+
+    install_dir = create_managed_install(tmp_path)
+    backup_script = install_dir / 'scripts' / 'data-backup.sh'
+    backup_script.write_text('#!/usr/bin/env bash\n# LANBOT_BACKUP_LOCK_FD\n', encoding='utf-8')
+    command = r"""
+PATH=/usr/bin:/bin:$PATH
+export PATH
+source "$1"
+INSTALL_DIR="$2"
+AUTO_BACKUP_BEFORE_UPDATE=true
+BACKUP_KEEP=7
+BACKUP_DIR=/srv/ai-lanbot-backups
+DEPLOY_LOCK_FD=9
+bash() {
+  printf '%s\n' "${LANBOT_BACKUP_LOCK_FD:-}|${LANBOT_BACKUP_KEEP:-}|${LANBOT_BACKUP_DIR:-}|$*"
+}
+create_pre_update_backup
+"""
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT), str(install_dir)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    lock_fd, keep, backup_dir, invocation = result.stdout.splitlines()[-1].split('|', maxsplit=3)
+    assert (lock_fd, keep, backup_dir) == ('9', '7', '/srv/ai-lanbot-backups')
+    assert invocation.replace('\\', '/') == f'{backup_script} create {install_dir}'.replace('\\', '/')
+
+
+def test_pre_update_backup_downloads_target_tool_for_legacy_install(tmp_path):
+    if BASH is None:
+        pytest.skip('bash is required to exercise the Linux deployment script')
+
+    install_dir = create_managed_install(tmp_path)
+    command = r"""
+PATH=/usr/bin:/bin:$PATH
+export PATH
+source "$1"
+INSTALL_DIR="$2"
+AUTO_BACKUP_BEFORE_UPDATE=true
+BACKUP_KEEP=5
+BACKUP_DIR=
+DEPLOY_LOCK_FD=9
+download_revision_file() {
+  printf '%s\n' '#!/usr/bin/env bash' '# LANBOT_BACKUP_LOCK_FD' > "$2"
+}
+bash() {
+  [ "${1:-}" != '-n' ] || return 0
+  printf 'run:%s\n' "$*"
+}
+create_pre_update_backup
+"""
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT), str(install_dir)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert any(
+        line.startswith('run:') and line.endswith(f' create {install_dir}') for line in result.stdout.splitlines()
+    )
+    assert not (install_dir / 'scripts' / 'data-backup.sh').exists()
 
 
 def test_target_revision_pins_the_downloaded_source():
@@ -370,6 +488,9 @@ def test_host_updater_is_fixed_to_the_managed_deployment():
     assert 'LANBOT_HTTP_PORT' in host_script
     assert 'LANBOT_COMPOSE_PROFILES' in host_script
     assert 'LANBOT_PUBLIC_URL' in host_script
+    assert 'LANBOT_AUTO_BACKUP_BEFORE_UPDATE' in host_script
+    assert 'LANBOT_BACKUP_KEEP' in host_script
+    assert 'LANBOT_BACKUP_DIR' in host_script
     assert 'commits/${REPO_BRANCH}.atom' in host_script
     assert "'application/vnd.github.sha'" in host_script
     assert '--max-filesize 524288' in host_script
@@ -381,7 +502,19 @@ def test_runtime_image_is_preflighted_before_source_replacement():
 
     assert main_body.index('runtime_image="$(resolve_runtime_image)"') < main_body.index('\n  fetch_source')
     assert main_body.index('prepare_runtime_image "$runtime_image"') < main_body.index('\n  fetch_source')
+    assert main_body.index('prepare_runtime_image "$runtime_image"') < main_body.index('\n  create_pre_update_backup')
+    assert main_body.index('\n  create_pre_update_backup') < main_body.index('\n  fetch_source')
     assert 'acquire_deployment_lock' in main_body
+
+
+def test_pre_update_backup_configuration_is_persisted_and_supports_legacy_installs():
+    script = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+
+    assert 'set_env_key "$env_file" "LANBOT_AUTO_BACKUP_BEFORE_UPDATE" "$AUTO_BACKUP_BEFORE_UPDATE"' in script
+    assert 'set_env_key "$env_file" "LANBOT_BACKUP_KEEP" "$BACKUP_KEEP"' in script
+    assert 'set_env_key "$env_file" "LANBOT_BACKUP_DIR" "$BACKUP_DIR"' in script
+    assert 'download_revision_file "scripts/data-backup.sh" "$temporary_script"' in script
+    assert 'LANBOT_BACKUP_LOCK_FD="$DEPLOY_LOCK_FD"' in script
 
 
 def test_host_updater_files_are_installed_atomically():
@@ -459,6 +592,7 @@ def test_deployment_prints_qq_callback_reverse_proxy_details():
     assert 'QQ callback upstream (reverse proxy on another server): ${remote_url}' in script
     assert 'QQ callback upstream: ${local_url}/qq/callback' in script
     assert 'QQ platform callback after HTTPS proxy: ${PUBLIC_URL}/qq/callback' in script
+    assert 'Pre-update backups: enabled; keep ${BACKUP_KEEP} in ${BACKUP_DIR:-${INSTALL_DIR}-backups}.' in script
     assert 'Backup: ${INSTALL_DIR}/scripts/data-backup.sh create ${INSTALL_DIR}' in script
     assert 'Restore: ${INSTALL_DIR}/scripts/data-backup.sh restore <archive.tar.gz> ${INSTALL_DIR}' in script
 

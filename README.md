@@ -20,6 +20,8 @@ tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githu
 The script deploys the production instance to `/opt/ai-lanbot` on port `5300`
 by default. Once installed, authenticated administrators can check and install
 updates from the version control in the application sidebar.
+Existing deployments create a consistent local-data backup before an update
+changes the managed source or starts the new version.
 The reverse proxy upstream is `http://127.0.0.1:5300/qq/callback`, while the
 default QQ Open Platform callback is
 `https://idc.csbsgyl.com/qq/callback`.

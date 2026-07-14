@@ -1263,7 +1263,7 @@ const enUS = {
     reload: 'Reload',
     confirmTitle: 'Install update?',
     confirmDescription:
-      'The service will restart and the dashboard will be briefly unavailable.',
+      'A local-data backup is created by default, then the service restarts and the dashboard is briefly unavailable.',
     updateQueued: 'Update request submitted',
   },
   account: {

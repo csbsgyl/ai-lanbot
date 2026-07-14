@@ -1203,7 +1203,8 @@ const zhHans = {
     installUpdate: '立即更新',
     reload: '刷新页面',
     confirmTitle: '确认安装更新？',
-    confirmDescription: '更新期间服务将重启，后台会短暂断开连接。',
+    confirmDescription:
+      '默认会先创建本地数据备份，随后服务将重启，后台会短暂断开连接。',
     updateQueued: '更新请求已提交',
   },
   account: {

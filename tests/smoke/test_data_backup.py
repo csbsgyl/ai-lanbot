@@ -86,6 +86,7 @@ def create_harness(tmp_path: Path, *, backend: str = 'sqlite') -> BackupHarness:
     (data_dir / 'config.yaml').write_text(f'database:\n    use: {backend}\n', encoding='utf-8')
     (data_dir / 'value.txt').write_text('old\n', encoding='utf-8')
     (data_dir / 'value-link.txt').symlink_to('value.txt')
+    (scripts_dir / 'one-click-deploy.sh').write_text('#!/usr/bin/env bash\n', encoding='utf-8')
     shutil.copy2(BACKUP_SCRIPT, scripts_dir / 'data-backup.sh')
     (scripts_dir / 'data-backup.sh').chmod(0o755)
 
@@ -223,6 +224,41 @@ def test_create_writes_consistent_private_archive_and_checksum(tmp_path: Path):
     commands = harness.command_log.read_text(encoding='utf-8')
     assert 'compose --profile all stop langbot' in commands
     assert 'compose --profile all start langbot' in commands
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='inherited Linux file descriptors require /proc')
+def test_backup_accepts_only_the_matching_inherited_deployment_lock(tmp_path: Path):
+    assert BASH is not None
+    install_dir = tmp_path / 'ai-lanbot'
+    install_dir.mkdir()
+    command = r"""
+source "$1"
+INSTALL_DIR="$2"
+exec 9>"${INSTALL_DIR}.deploy.lock"
+flock -n 9
+LANBOT_BACKUP_LOCK_FD=9
+acquire_backup_lock
+"""
+    valid = subprocess.run(
+        [BASH, '-c', command, 'backup-lock-test', str(BACKUP_SCRIPT), str(install_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    wrong_lock = tmp_path / 'other.lock'
+    invalid_command = command.replace(
+        'exec 9>"${INSTALL_DIR}.deploy.lock"',
+        f'exec 9>"{wrong_lock}"',
+    )
+    invalid = subprocess.run(
+        [BASH, '-c', invalid_command, 'backup-lock-test', str(BACKUP_SCRIPT), str(install_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert valid.returncode == 0, valid.stderr
+    assert invalid.returncode != 0
+    assert 'does not reference this deployment' in invalid.stderr
 
 
 def test_same_second_backups_use_monotonic_sequence_across_revisions(tmp_path: Path):

@@ -51,7 +51,7 @@ initialize_paths() {
   INSTALL_DIR="$(cd -- "$requested_install_dir" && pwd -P)"
   if [ ! -f "${INSTALL_DIR}/pyproject.toml" ] \
     || [ ! -f "${INSTALL_DIR}/docker/docker-compose.yaml" ] \
-    || [ ! -f "${INSTALL_DIR}/scripts/data-backup.sh" ]; then
+    || [ ! -f "${INSTALL_DIR}/scripts/one-click-deploy.sh" ]; then
     die "Install directory is not a managed ai-lanbot deployment."
   fi
   [ -d "${INSTALL_DIR}/docker/data" ] || die "Deployment data directory does not exist."
@@ -83,7 +83,21 @@ initialize_paths() {
 }
 
 acquire_backup_lock() {
+  local inherited_fd="${LANBOT_BACKUP_LOCK_FD:-}"
+
   need_cmd flock
+  if [ -n "$inherited_fd" ]; then
+    case "$inherited_fd" in
+      *[!0-9]*|'') die "LANBOT_BACKUP_LOCK_FD must identify an inherited deployment lock." ;;
+    esac
+    if [ "$inherited_fd" -lt 3 ] \
+      || [ ! -e "/proc/$$/fd/${inherited_fd}" ] \
+      || [ ! "/proc/$$/fd/${inherited_fd}" -ef "${INSTALL_DIR}.deploy.lock" ]; then
+      die "LANBOT_BACKUP_LOCK_FD does not reference this deployment's lock."
+    fi
+    flock -n "$inherited_fd" || die "The inherited deployment lock is not held."
+    return 0
+  fi
   if ! exec 8>"${INSTALL_DIR}.deploy.lock"; then
     die "Could not open the deployment lock file."
   fi
