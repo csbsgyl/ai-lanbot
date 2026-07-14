@@ -51,6 +51,7 @@ class QQOfficialClient:
         self.base_url = 'https://api.sgroup.qq.com'
         self.access_token = ''
         self.access_token_expiry_time = None
+        self._access_token_lock = asyncio.Lock()
         self.logger = logger
         self._msg_seq_counter = 0
         self._token_refresh_task: Optional[asyncio.Task] = None
@@ -77,29 +78,52 @@ class QQOfficialClient:
             return False
         return bool(self.access_token and self.access_token.strip())
 
-    async def get_access_token(self):
+    async def get_access_token(self, force_refresh: bool = False) -> str:
         """获取access_token"""
-        url = 'https://bots.qq.com/app/getAppAccessToken'
-        async with httpx.AsyncClient() as client:
-            params = {
-                'appId': self.app_id,
-                'clientSecret': self.secret,
-            }
-            headers = {
-                'content-type': 'application/json',
-            }
-            response = await client.post(url, json=params, headers=headers)
+        async with self._access_token_lock:
+            if not force_refresh and await self.check_access_token():
+                return self.access_token
+
+            url = 'https://bots.qq.com/app/getAppAccessToken'
+            try:
+                async with httpx.AsyncClient() as client:
+                    params = {
+                        'appId': self.app_id,
+                        'clientSecret': self.secret,
+                    }
+                    headers = {
+                        'content-type': 'application/json',
+                    }
+                    response = await client.post(url, json=params, headers=headers)
+            except httpx.HTTPError:
+                raise RuntimeError('Failed to get access_token: request failed') from None
+
             if response.status_code != 200:
-                raise Exception(f'Failed to get access_token: HTTP {response.status_code} {response.text}')
-            response_data = response.json()
+                raise RuntimeError(f'Failed to get access_token: HTTP {response.status_code}')
+
+            try:
+                response_data = response.json()
+            except (TypeError, ValueError):
+                raise RuntimeError('Failed to get access_token: invalid response') from None
+
+            if not isinstance(response_data, dict):
+                raise RuntimeError('Failed to get access_token: invalid response')
+
             access_token = response_data.get('access_token')
-            expires_in = int(response_data.get('expires_in', 7200))
-            self.access_token_expiry_time = time.time() + expires_in - 60
-            if access_token:
-                self.access_token = access_token
-                await self.logger.info(f'access_token obtained, expires_in={expires_in}s')
-            else:
-                raise Exception('Failed to get access_token: no access_token in response')
+            try:
+                expires_in = int(response_data.get('expires_in', 7200))
+            except (TypeError, ValueError):
+                raise RuntimeError('Failed to get access_token: invalid response') from None
+
+            if not isinstance(access_token, str) or not access_token.strip() or expires_in <= 0:
+                raise RuntimeError('Failed to get access_token: invalid response')
+
+            new_access_token = access_token.strip()
+            new_expiry_time = time.time() + expires_in - 60
+            self.access_token = new_access_token
+            self.access_token_expiry_time = new_expiry_time
+            await self.logger.info(f'access_token obtained, expires_in={expires_in}s')
+            return new_access_token
 
     async def handle_callback_request(self):
         """处理回调请求（独立端口模式，使用全局 request）"""
@@ -859,13 +883,13 @@ class QQOfficialClient:
                     if remain > 120:
                         await asyncio.sleep(remain - 60)
                         continue
-                self.access_token = ''
-                self.access_token_expiry_time = None
-                if await self.check_access_token():
-                    await asyncio.sleep(60)
-                else:
-                    await self.get_access_token()
-                    await asyncio.sleep(60)
+                try:
+                    await self.get_access_token(force_refresh=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    await self.logger.error('Failed to refresh access_token; retrying in 60s')
+                await asyncio.sleep(60)
         except asyncio.CancelledError:
             pass
 
@@ -890,6 +914,7 @@ class QQOfficialClient:
         max_reconnect_attempts = 100
         backoff_delays = [1, 2, 5, 10, 30, 60]
         rate_limit_delay = 60
+        should_refresh_token = False
 
         # Cancel previous token refresh task if any
         if self._token_refresh_task and not self._token_refresh_task.done():
@@ -902,16 +927,13 @@ class QQOfficialClient:
 
         while reconnect_attempts <= max_reconnect_attempts:
             heartbeat_interval = 45000
-            should_refresh_token = False
             ws = None
             heartbeat_task = None
 
-            # Refresh token if needed
-            if should_refresh_token:
-                self.access_token = ''
-                self.access_token_expiry_time = None
-
             try:
+                if should_refresh_token:
+                    await self.get_access_token(force_refresh=True)
+                    should_refresh_token = False
                 ws_url = await self.get_gateway_url()
                 await self.logger.info(f'Gateway URL obtained: {ws_url[:60]}...')
             except Exception as e:

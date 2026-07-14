@@ -20,6 +20,15 @@ def _logger():
     return SimpleNamespace(info=AsyncMock(), warning=AsyncMock(), error=AsyncMock())
 
 
+def _mock_token_endpoint(monkeypatch, response):
+    http_client = AsyncMock()
+    http_client.__aenter__.return_value = http_client
+    http_client.post = AsyncMock(return_value=response)
+    client_factory = Mock(return_value=http_client)
+    monkeypatch.setattr('langbot.libs.qq_official_api.api.httpx.AsyncClient', client_factory)
+    return http_client, client_factory
+
+
 def _qq_secret_seed(secret: str) -> bytes:
     seed = secret
     while len(seed) < 32:
@@ -133,6 +142,145 @@ def test_event_model_accepts_legacy_openid_field():
     event = QQOfficialEvent({'openid': 'legacy-member-openid'})
 
     assert event.member_openid == 'legacy-member-openid'
+
+
+@pytest.mark.asyncio
+async def test_qq_access_token_requests_are_coalesced(monkeypatch):
+    response = SimpleNamespace(
+        status_code=200,
+        json=Mock(return_value={'access_token': 'new-token', 'expires_in': 7200}),
+    )
+    http_client, client_factory = _mock_token_endpoint(monkeypatch, response)
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    tokens = await asyncio.gather(*(client.get_access_token() for _ in range(8)))
+
+    assert tokens == ['new-token'] * 8
+    assert client.access_token == 'new-token'
+    http_client.post.assert_awaited_once()
+    client_factory.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_qq_failed_forced_token_refresh_preserves_previous_token(monkeypatch):
+    response = SimpleNamespace(
+        status_code=200,
+        json=Mock(return_value={'expires_in': 7200}),
+    )
+    _mock_token_endpoint(monkeypatch, response)
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    previous_expiry = time.time() + 3600
+    client.access_token = 'previous-token'
+    client.access_token_expiry_time = previous_expiry
+
+    with pytest.raises(RuntimeError, match='invalid response'):
+        await client.get_access_token(force_refresh=True)
+
+    assert client.access_token == 'previous-token'
+    assert client.access_token_expiry_time == previous_expiry
+
+
+@pytest.mark.asyncio
+async def test_qq_background_token_refresh_keeps_previous_token_on_failure():
+    logger = _logger()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=logger,
+        unified_mode=True,
+    )
+    client.access_token = 'previous-token'
+    client.access_token_expiry_time = time.time() + 60
+    refresh_attempted = asyncio.Event()
+
+    async def failed_refresh(*_args, **_kwargs):
+        refresh_attempted.set()
+        raise RuntimeError('refresh failed')
+
+    client.get_access_token = AsyncMock(side_effect=failed_refresh)
+    refresh_task = asyncio.create_task(client._background_token_refresh())
+    await asyncio.wait_for(refresh_attempted.wait(), timeout=1)
+
+    assert client.access_token == 'previous-token'
+    assert client.access_token_expiry_time is not None
+    client.get_access_token.assert_awaited_once_with(force_refresh=True)
+    logger.error.assert_awaited_once_with('Failed to refresh access_token; retrying in 60s')
+
+    refresh_task.cancel()
+    await refresh_task
+
+
+@pytest.mark.asyncio
+async def test_qq_gateway_auth_failure_refreshes_token_before_reconnect(monkeypatch):
+    class EmptyWebSocket:
+        def __init__(self, close_code):
+            self.close_code = close_code
+            self.close_reason = ''
+            self.close = AsyncMock()
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    first_connection = EmptyWebSocket(close_code=4004)
+    second_connection = EmptyWebSocket(close_code=1000)
+    connect = AsyncMock(side_effect=[first_connection, second_connection])
+    monkeypatch.setattr('websockets.connect', connect)
+    monkeypatch.setattr('langbot.libs.qq_official_api.api.asyncio.sleep', AsyncMock())
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client.get_gateway_url = AsyncMock(return_value='wss://gateway.example')
+    client.get_access_token = AsyncMock(return_value='refreshed-token')
+
+    await client.connect_gateway(on_event=AsyncMock())
+
+    client.get_access_token.assert_awaited_once_with(force_refresh=True)
+    assert client.get_gateway_url.await_count == 2
+    assert connect.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_qq_access_token_failure_hides_upstream_response(monkeypatch):
+    private_response = 'clientSecret=private-value'
+    response = SimpleNamespace(
+        status_code=401,
+        text=private_response,
+        json=Mock(return_value={'message': private_response}),
+    )
+    _mock_token_endpoint(monkeypatch, response)
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await client.get_access_token()
+
+    assert str(exc_info.value) == 'Failed to get access_token: HTTP 401'
+    assert private_response not in str(exc_info.value)
 
 
 @pytest.mark.asyncio
