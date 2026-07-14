@@ -301,7 +301,9 @@ class IDCQueryGateway:
                 response_text,
                 parse_constant=_reject_json_constant,
             )
-        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError, ValueError) as exc:
+        except RecursionError as exc:
+            raise GatewayError('查询服务返回的数据结构过于复杂。') from exc
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
             raise GatewayError('查询服务返回了无法识别的数据。') from exc
         if not isinstance(payload, dict):
             raise GatewayError('查询服务返回了无法识别的数据。')
@@ -341,11 +343,7 @@ class IDCQueryGateway:
     @staticmethod
     def _http_error_message(status: int, operation: str) -> str:
         if status == 429:
-            return (
-                '绑定验证请求过于频繁，请稍后重试。'
-                if operation == 'binding'
-                else '查询请求过于频繁，请稍后重试。'
-            )
+            return '绑定验证请求过于频繁，请稍后重试。' if operation == 'binding' else '查询请求过于频繁，请稍后重试。'
         if operation == 'binding' and status in {400, 404, 409, 422}:
             return '绑定验证未通过，请检查会员号和验证码后重试。'
         if status == 401:
