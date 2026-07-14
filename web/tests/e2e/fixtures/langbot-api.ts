@@ -544,6 +544,86 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     });
   }
 
+  if (path === '/api/v1/system/idc-query/diagnostics') {
+    return fulfillJson(route, {
+      schema_version: 1,
+      application: {
+        version: 'v4.10.5',
+        revision: '1111111111111111111111111111111111111111',
+        edition: 'community',
+        debug: false,
+        managed_updates: true,
+      },
+      readiness: {
+        available: true,
+        status: state.idcQueryConfig.configured ? 'ready' : 'not_ready',
+        checks: [
+          { id: 'qq_bot', status: 'pass', code: 'enabled' },
+          {
+            id: 'gateway_config',
+            status: state.idcQueryConfig.configured ? 'pass' : 'fail',
+            code: state.idcQueryConfig.configured
+              ? 'configured'
+              : 'not_configured',
+          },
+        ],
+        last_qq_event_at: '2026-07-13T10:05:00+00:00',
+        last_idc_operation_at: '2026-07-12T10:00:00+00:00',
+      },
+      qq_callback: {
+        available: true,
+        status: 'ready',
+        callback_path: '/qq/callback',
+        configured_bots: 1,
+        enabled_bots: 1,
+        disabled_bots: 0,
+        active_webhook_bots: 1,
+        active_websocket_bots: 0,
+        metrics: {
+          requests_total: 9,
+          validations_total: 1,
+          events_total: 6,
+          duplicates_total: 1,
+          rejected_total: 1,
+          overloaded_total: 0,
+          pending_events: 0,
+          pending_limit: 256,
+          last_request_at: '2026-07-13T10:05:00+00:00',
+          last_valid_at: '2026-07-13T10:05:00+00:00',
+          last_event_at: '2026-07-13T10:05:00+00:00',
+          last_rejected_at: '2026-07-13T10:01:00+00:00',
+          last_overloaded_at: null,
+        },
+      },
+      gateway: {
+        available: true,
+        configured: state.idcQueryConfig.configured,
+        transport: state.idcQueryConfig.configured ? 'https' : 'unavailable',
+        verify_tls: state.idcQueryConfig.verify_tls,
+        service_token_configured: state.idcQueryConfig.token_configured,
+        timeout_seconds: state.idcQueryConfig.timeout_seconds,
+        requests_per_minute: state.idcQueryConfig.requests_per_minute,
+        bind_attempts_per_10_minutes:
+          state.idcQueryConfig.bind_attempts_per_10_minutes,
+      },
+      audit: {
+        available: true,
+        sample_size: 2,
+        commands: { ip: 1, balance: 1, unknown: 0 },
+        outcomes: { success: 1, denied: 1, unknown: 0 },
+        reasons: { queried: 1, binder_required: 1, unknown: 0 },
+        last_event_at: '2026-07-12T10:00:00+00:00',
+        last_event: {
+          command: 'ip',
+          outcome: 'success',
+          reason: 'queried',
+          duration_ms: 35,
+        },
+      },
+      generated_at: '2026-07-13T10:06:00+00:00',
+    });
+  }
+
   if (path === '/api/v1/system/idc-query/test' && method === 'POST') {
     const payload = parseJsonBody(route);
     return fulfillJson(route, {

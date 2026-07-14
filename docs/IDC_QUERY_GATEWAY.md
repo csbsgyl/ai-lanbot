@@ -62,6 +62,16 @@ runtime errors, message content, and QQ identities. The readiness endpoint
 also requires a user login token and is intentionally unavailable to API keys
 and MCP.
 
+The Overview toolbar can copy a fixed-schema support report from
+`/api/v1/system/idc-query/diagnostics`. The report contains the application
+version/revision, readiness codes, aggregate QQ callback counters, gateway
+configuration booleans/limits, and categorical audit counts. It never includes
+individual bot names, UUIDs or App IDs, callback/gateway URLs, credentials,
+exception text, QQ identities, member IDs, request IDs, messages, IP arguments,
+or gateway responses. Unknown audit values are collapsed to `unknown` rather
+than copied. This endpoint also requires a user login token and rejects API-key
+and MCP authentication.
+
 The configuration page also controls bot-side per-member limits for normal
 queries and binding attempts. These limits protect the bot and gateway from a
 single noisy QQ member; they are defense in depth and do not replace

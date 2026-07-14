@@ -7,6 +7,7 @@ import {
   Cable,
   CheckCircle2,
   ClipboardCheck,
+  Copy,
   Link2,
   Loader2,
   RefreshCw,
@@ -91,6 +92,7 @@ export default function IDCQuerySettingsPanel({
   const [readiness, setReadiness] = useState<ApiRespIDCReadiness | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState('');
+  const [copyingDiagnostics, setCopyingDiagnostics] = useState(false);
 
   const invalidateConnectionResult = useCallback(() => {
     connectionTestSequence.current += 1;
@@ -179,6 +181,23 @@ export default function IDCQuerySettingsPanel({
       setReadinessLoading(false);
     }
   }, []);
+
+  const copyDiagnostics = async () => {
+    setCopyingDiagnostics(true);
+    try {
+      const report = await backendClient.getIDCDiagnostics();
+      await navigator.clipboard.writeText(
+        `${JSON.stringify(report, null, 2)}\n`,
+      );
+      toast.success(t('idcQuery.diagnostics.copied'));
+    } catch (copyError) {
+      toast.error(
+        `${t('idcQuery.diagnostics.copyError')}: ${getErrorMessage(copyError)}`,
+      );
+    } finally {
+      setCopyingDiagnostics(false);
+    }
+  };
 
   useEffect(() => {
     if (active) loadConfig();
@@ -404,63 +423,82 @@ export default function IDCQuerySettingsPanel({
             </Button>
           </div>
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={
-              activeTab === 'callback'
-                ? loadQQStatus
-                : activeTab === 'bindings'
-                  ? loadBindings
-                  : activeTab === 'audit'
-                    ? loadAudit
-                    : loadReadiness
-            }
-            disabled={
-              activeTab === 'callback'
-                ? qqStatusLoading
-                : activeTab === 'bindings'
-                  ? bindingsLoading
-                  : activeTab === 'audit'
-                    ? auditLoading
-                    : readinessLoading
-            }
-            aria-label={t(
-              activeTab === 'callback'
-                ? 'idcQuery.callback.refresh'
-                : activeTab === 'bindings'
-                  ? 'idcQuery.bindings.refresh'
-                  : activeTab === 'audit'
-                    ? 'idcQuery.audit.refresh'
-                    : 'idcQuery.readiness.refresh',
+          <div className="flex items-center gap-2">
+            {activeTab === 'readiness' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={copyDiagnostics}
+                disabled={copyingDiagnostics || readinessLoading}
+                aria-label={t('idcQuery.diagnostics.copy')}
+                title={t('idcQuery.diagnostics.copy')}
+              >
+                {copyingDiagnostics ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Copy />
+                )}
+              </Button>
             )}
-            title={t(
-              activeTab === 'callback'
-                ? 'idcQuery.callback.refresh'
-                : activeTab === 'bindings'
-                  ? 'idcQuery.bindings.refresh'
-                  : activeTab === 'audit'
-                    ? 'idcQuery.audit.refresh'
-                    : 'idcQuery.readiness.refresh',
-            )}
-          >
-            <RefreshCw
-              className={
-                (
-                  activeTab === 'callback'
-                    ? qqStatusLoading
-                    : activeTab === 'bindings'
-                      ? bindingsLoading
-                      : activeTab === 'audit'
-                        ? auditLoading
-                        : readinessLoading
-                )
-                  ? 'animate-spin'
-                  : ''
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={
+                activeTab === 'callback'
+                  ? loadQQStatus
+                  : activeTab === 'bindings'
+                    ? loadBindings
+                    : activeTab === 'audit'
+                      ? loadAudit
+                      : loadReadiness
               }
-            />
-          </Button>
+              disabled={
+                activeTab === 'callback'
+                  ? qqStatusLoading
+                  : activeTab === 'bindings'
+                    ? bindingsLoading
+                    : activeTab === 'audit'
+                      ? auditLoading
+                      : readinessLoading
+              }
+              aria-label={t(
+                activeTab === 'callback'
+                  ? 'idcQuery.callback.refresh'
+                  : activeTab === 'bindings'
+                    ? 'idcQuery.bindings.refresh'
+                    : activeTab === 'audit'
+                      ? 'idcQuery.audit.refresh'
+                      : 'idcQuery.readiness.refresh',
+              )}
+              title={t(
+                activeTab === 'callback'
+                  ? 'idcQuery.callback.refresh'
+                  : activeTab === 'bindings'
+                    ? 'idcQuery.bindings.refresh'
+                    : activeTab === 'audit'
+                      ? 'idcQuery.audit.refresh'
+                      : 'idcQuery.readiness.refresh',
+              )}
+            >
+              <RefreshCw
+                className={
+                  (
+                    activeTab === 'callback'
+                      ? qqStatusLoading
+                      : activeTab === 'bindings'
+                        ? bindingsLoading
+                        : activeTab === 'audit'
+                          ? auditLoading
+                          : readinessLoading
+                  )
+                    ? 'animate-spin'
+                    : ''
+                }
+              />
+            </Button>
+          </div>
         )}
       </PanelToolbar>
 

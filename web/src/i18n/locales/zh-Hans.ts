@@ -1553,6 +1553,11 @@ const zhHans = {
         recorded: '已记录实际 IDC 操作。',
       },
     },
+    diagnostics: {
+      copy: '复制诊断报告',
+      copied: '诊断报告已复制',
+      copyError: '无法复制诊断报告',
+    },
     configured: '网关已配置',
     notConfigured: '网关未配置',
     refresh: '刷新',

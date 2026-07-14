@@ -1622,6 +1622,11 @@ const enUS = {
         recorded: 'An IDC operation has been recorded.',
       },
     },
+    diagnostics: {
+      copy: 'Copy diagnostics',
+      copied: 'Diagnostics copied',
+      copyError: 'Could not copy diagnostics',
+    },
     configured: 'Gateway configured',
     notConfigured: 'Gateway not configured',
     refresh: 'Refresh',

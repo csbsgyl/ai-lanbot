@@ -444,6 +444,88 @@ export interface ApiRespIDCReadiness {
   generated_at: string;
 }
 
+export interface IDCDiagnosticApplication {
+  version: string;
+  revision: string;
+  edition: string;
+  debug: boolean;
+  managed_updates: boolean;
+}
+
+export interface IDCDiagnosticReadiness {
+  available: boolean;
+  status: IDCReadinessStatus;
+  checks: IDCReadinessCheck[];
+  last_qq_event_at: string | null;
+  last_idc_operation_at: string | null;
+}
+
+export interface IDCDiagnosticQQMetrics {
+  requests_total: number;
+  validations_total: number;
+  events_total: number;
+  duplicates_total: number;
+  rejected_total: number;
+  overloaded_total: number;
+  pending_events: number;
+  pending_limit: number;
+  last_request_at: string | null;
+  last_valid_at: string | null;
+  last_event_at: string | null;
+  last_rejected_at: string | null;
+  last_overloaded_at: string | null;
+}
+
+export interface IDCDiagnosticQQCallback {
+  available: boolean;
+  status: QQOfficialCallbackStatus | 'unavailable';
+  callback_path: '/qq/callback';
+  configured_bots: number;
+  enabled_bots: number;
+  disabled_bots: number;
+  active_webhook_bots: number;
+  active_websocket_bots: number;
+  metrics: IDCDiagnosticQQMetrics;
+}
+
+export interface IDCDiagnosticGateway {
+  available: boolean;
+  configured: boolean;
+  transport: 'http' | 'https' | 'unavailable';
+  verify_tls: boolean;
+  service_token_configured: boolean;
+  timeout_seconds: number;
+  requests_per_minute: number;
+  bind_attempts_per_10_minutes: number;
+}
+
+export interface IDCDiagnosticAuditEvent {
+  command: string;
+  outcome: string;
+  reason: string;
+  duration_ms: number;
+}
+
+export interface IDCDiagnosticAudit {
+  available: boolean;
+  sample_size: number;
+  commands: Record<string, number>;
+  outcomes: Record<string, number>;
+  reasons: Record<string, number>;
+  last_event_at: string | null;
+  last_event: IDCDiagnosticAuditEvent | null;
+}
+
+export interface ApiRespIDCDiagnostics {
+  schema_version: 1;
+  application: IDCDiagnosticApplication;
+  readiness: IDCDiagnosticReadiness;
+  qq_callback: IDCDiagnosticQQCallback;
+  gateway: IDCDiagnosticGateway;
+  audit: IDCDiagnosticAudit;
+  generated_at: string;
+}
+
 export interface UpdateIDCQueryConfig {
   base_url?: string;
   token?: string;

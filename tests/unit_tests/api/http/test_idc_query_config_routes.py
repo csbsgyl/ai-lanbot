@@ -111,6 +111,61 @@ async def idc_config_route_client():
             'generated_at': '2026-07-13T10:06:00+00:00',
         }
     )
+    app.idc_readiness_service.get_diagnostics = AsyncMock(
+        return_value={
+            'schema_version': 1,
+            'application': {
+                'version': 'v4.10.5',
+                'revision': 'a' * 40,
+                'edition': 'community',
+                'debug': False,
+                'managed_updates': True,
+            },
+            'readiness': {
+                'available': True,
+                'status': 'attention',
+                'checks': [{'id': 'qq_bot', 'status': 'pass', 'code': 'enabled'}],
+                'last_qq_event_at': '2026-07-13T10:05:00+00:00',
+                'last_idc_operation_at': None,
+            },
+            'qq_callback': {
+                'available': True,
+                'status': 'ready',
+                'callback_path': '/qq/callback',
+                'configured_bots': 1,
+                'enabled_bots': 1,
+                'disabled_bots': 0,
+                'active_webhook_bots': 1,
+                'active_websocket_bots': 0,
+                'metrics': {'events_total': 6},
+            },
+            'gateway': {
+                'available': True,
+                'configured': True,
+                'transport': 'https',
+                'verify_tls': True,
+                'service_token_configured': True,
+                'timeout_seconds': 8,
+                'requests_per_minute': 20,
+                'bind_attempts_per_10_minutes': 5,
+            },
+            'audit': {
+                'available': True,
+                'sample_size': 1,
+                'commands': {'ip': 1},
+                'outcomes': {'success': 1},
+                'reasons': {'queried': 1},
+                'last_event_at': '2026-07-12T10:00:00+00:00',
+                'last_event': {
+                    'command': 'ip',
+                    'outcome': 'success',
+                    'reason': 'queried',
+                    'duration_ms': 12,
+                },
+            },
+            'generated_at': '2026-07-13T10:06:00+00:00',
+        }
+    )
 
     quart_app = quart.Quart(__name__)
     router = SystemRouterGroup(app, quart_app)
@@ -128,6 +183,7 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     bindings_response = await client.get('/api/v1/system/idc-query/bindings')
     test_response = await client.post('/api/v1/system/idc-query/test', json={})
     readiness_response = await client.get('/api/v1/system/idc-query/readiness')
+    diagnostics_response = await client.get('/api/v1/system/idc-query/diagnostics')
     qq_status_response = await client.get('/api/v1/system/qqofficial/status')
 
     assert get_response.status_code == 401
@@ -136,6 +192,7 @@ async def test_idc_config_routes_require_user_authentication(idc_config_route_cl
     assert bindings_response.status_code == 401
     assert test_response.status_code == 401
     assert readiness_response.status_code == 401
+    assert diagnostics_response.status_code == 401
     assert qq_status_response.status_code == 401
 
 
@@ -181,6 +238,13 @@ async def test_idc_config_routes_reject_api_key_authentication(idc_config_route_
     assert readiness_response.status_code == 401
     app.idc_readiness_service.get_readiness.assert_not_awaited()
 
+    diagnostics_response = await client.get(
+        '/api/v1/system/idc-query/diagnostics',
+        headers={'X-API-Key': 'automation-key'},
+    )
+    assert diagnostics_response.status_code == 401
+    app.idc_readiness_service.get_diagnostics.assert_not_awaited()
+
     qq_status_response = await client.get(
         '/api/v1/system/qqofficial/status',
         headers={'X-API-Key': 'automation-key'},
@@ -224,6 +288,49 @@ async def test_idc_readiness_route_does_not_expose_runtime_errors(idc_config_rou
 
     assert response.status_code == 500
     assert (await response.get_json())['msg'] == 'Failed to read IDC query readiness.'
+    response_text = await response.get_data(as_text=True)
+    assert 'service token' not in response_text
+    assert '/private/idc' not in response_text
+
+
+@pytest.mark.asyncio
+async def test_idc_diagnostics_route_uses_user_login_and_returns_sanitized_report(
+    idc_config_route_client,
+):
+    client, app = idc_config_route_client
+
+    response = await client.get(
+        '/api/v1/system/idc-query/diagnostics',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 200
+    response_data = (await response.get_json())['data']
+    assert response_data['schema_version'] == 1
+    assert response_data['qq_callback']['configured_bots'] == 1
+    assert response_data['audit']['last_event']['outcome'] == 'success'
+    response_text = await response.get_data(as_text=True)
+    assert 'app_id' not in response_text
+    assert 'base_url' not in response_text
+    assert 'group_id' not in response_text
+    assert 'member_id' not in response_text
+    app.idc_readiness_service.get_diagnostics.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_idc_diagnostics_route_does_not_expose_generation_errors(idc_config_route_client):
+    client, app = idc_config_route_client
+    app.idc_readiness_service.get_diagnostics.side_effect = RuntimeError(
+        'service token loaded from /private/idc/config.env'
+    )
+
+    response = await client.get(
+        '/api/v1/system/idc-query/diagnostics',
+        headers={'Authorization': 'Bearer test-token'},
+    )
+
+    assert response.status_code == 500
+    assert (await response.get_json())['msg'] == 'Failed to generate IDC query diagnostics.'
     response_text = await response.get_data(as_text=True)
     assert 'service token' not in response_text
     assert '/private/idc' not in response_text

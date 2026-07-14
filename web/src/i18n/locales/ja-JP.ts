@@ -1628,6 +1628,11 @@ const jaJP = {
         recorded: 'IDC 操作が記録されています。',
       },
     },
+    diagnostics: {
+      copy: '診断レポートをコピー',
+      copied: '診断レポートをコピーしました',
+      copyError: '診断レポートをコピーできませんでした',
+    },
     configured: 'ゲートウェイ設定済み',
     notConfigured: 'ゲートウェイ未設定',
     refresh: '更新',

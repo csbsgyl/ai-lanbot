@@ -136,6 +136,14 @@ codes and normalized timestamps. It never returns the gateway URL, App ID,
 credentials, internal paths, runtime errors, messages, group IDs, or member
 IDs, and its endpoint accepts administrator login tokens only.
 
+Use the copy icon in the Overview toolbar when reporting a deployment problem.
+It copies a fixed-schema JSON report with version, readiness, aggregate callback
+counters, gateway flags/limits, and categorical audit counts. The server builds
+this report from an explicit allowlist: it excludes bot names, UUIDs, App IDs,
+URLs, credentials, exception text, QQ/member/request identities, messages, IP
+arguments, and query responses. The report endpoint accepts administrator login
+tokens only and rejects API-key and MCP authentication.
+
 ## Optional Environment Variables
 
 ```bash

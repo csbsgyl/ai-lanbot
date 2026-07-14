@@ -1551,6 +1551,11 @@ const zhHant = {
         recorded: '已記錄實際 IDC 操作。',
       },
     },
+    diagnostics: {
+      copy: '複製診斷報告',
+      copied: '診斷報告已複製',
+      copyError: '無法複製診斷報告',
+    },
     configured: '閘道已設定',
     notConfigured: '閘道未設定',
     refresh: '重新整理',

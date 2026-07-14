@@ -1658,6 +1658,11 @@ const esES = {
         recorded: 'Se registró una operación IDC.',
       },
     },
+    diagnostics: {
+      copy: 'Copiar diagnóstico',
+      copied: 'Diagnóstico copiado',
+      copyError: 'No se pudo copiar el diagnóstico',
+    },
     configured: 'Pasarela configurada',
     notConfigured: 'Pasarela sin configurar',
     refresh: 'Actualizar',

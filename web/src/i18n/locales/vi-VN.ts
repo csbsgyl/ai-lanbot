@@ -1623,6 +1623,11 @@ const viVN = {
         recorded: 'Đã ghi nhận một thao tác IDC.',
       },
     },
+    diagnostics: {
+      copy: 'Sao chép chẩn đoán',
+      copied: 'Đã sao chép chẩn đoán',
+      copyError: 'Không thể sao chép chẩn đoán',
+    },
     configured: 'Đã cấu hình cổng',
     notConfigured: 'Chưa cấu hình cổng',
     refresh: 'Làm mới',

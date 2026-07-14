@@ -115,6 +115,14 @@ class SystemRouterGroup(group.RouterGroup):
                 self.ap.logger.exception('Failed to read IDC query readiness')
                 return self.http_status(500, 500, 'Failed to read IDC query readiness.')
 
+        @self.route('/idc-query/diagnostics', methods=['GET'], auth_type=group.AuthType.USER_TOKEN)
+        async def _() -> str:
+            try:
+                return self.success(data=await self.ap.idc_readiness_service.get_diagnostics())
+            except Exception:
+                self.ap.logger.exception('Failed to generate IDC query diagnostics')
+                return self.http_status(500, 500, 'Failed to generate IDC query diagnostics.')
+
         @self.route('/idc-query/audit', methods=['GET'], auth_type=group.AuthType.USER_TOKEN)
         async def _() -> str:
             try:

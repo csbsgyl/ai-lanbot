@@ -77,6 +77,14 @@ def _checks_by_id(result: dict) -> dict[str, dict[str, str]]:
     return {check['id']: check for check in result['checks']}
 
 
+def _all_keys(value: object) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {key for item in value.values() for key in _all_keys(item)}
+    if isinstance(value, list):
+        return {key for item in value for key in _all_keys(item)}
+    return set()
+
+
 @pytest.mark.asyncio
 async def test_reports_ready_when_all_required_and_observation_checks_pass():
     app = _make_app()
@@ -304,3 +312,175 @@ async def test_latest_valid_activity_timestamps_are_normalized_and_disabled_bots
 
     assert result['last_qq_event_at'] == '2026-07-13T03:00:00+00:00'
     assert result['last_idc_operation_at'] == '2026-07-13T03:00:00+00:00'
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_aggregate_runtime_signals_without_identity_or_credentials(monkeypatch):
+    secrets = {
+        'private-app-id-1029384756',
+        'private-bot-uuid',
+        'Private QQ Bot Name',
+        'https://private-gateway.example/internal?token=secret',
+        'private-service-token',
+        'private-group-openid',
+        'private-user-openid',
+        'private-member-id',
+        'private-request-id',
+        'private-untrusted-reason',
+    }
+    app = _make_app(
+        qq_status={
+            'status': 'ready',
+            'configured_callback_url': 'https://private-callback.example/qq/callback',
+            'bots': [
+                {
+                    'uuid': 'private-bot-uuid',
+                    'name': 'Private QQ Bot Name',
+                    'app_id': 'private-app-id-1029384756',
+                    'enabled': True,
+                    'mode': 'webhook',
+                    'metrics': {
+                        'requests_total': 12,
+                        'validations_total': 2,
+                        'events_total': 8,
+                        'duplicates_total': 1,
+                        'rejected_total': 1,
+                        'overloaded_total': 0,
+                        'pending_events': 3,
+                        'pending_limit': 256,
+                        'last_request_at': '2026-07-13T10:05:00Z',
+                        'last_valid_at': '2026-07-13T10:04:00Z',
+                        'last_event_at': '2026-07-13T10:03:00Z',
+                        'last_rejected_at': '2026-07-13T10:02:00Z',
+                        'last_overloaded_at': None,
+                    },
+                },
+                {
+                    'uuid': 'disabled-private-bot',
+                    'name': 'Disabled Private Bot',
+                    'app_id': 'disabled-private-app-id',
+                    'enabled': False,
+                    'mode': 'webhook',
+                    'metrics': {'events_total': 999},
+                },
+                {
+                    'uuid': 'websocket-private-bot',
+                    'name': 'WebSocket Private Bot',
+                    'app_id': 'websocket-private-app-id',
+                    'enabled': True,
+                    'mode': 'websocket',
+                    'metrics': None,
+                },
+            ],
+        },
+        config={
+            'base_url': 'https://private-gateway.example/internal?token=secret',
+            'token': 'private-service-token',
+            'configured': True,
+            'verify_tls': True,
+            'token_configured': True,
+            'timeout_seconds': 12,
+            'requests_per_minute': 30,
+            'bind_attempts_per_10_minutes': 4,
+        },
+        audit={
+            'events': [
+                {
+                    'timestamp': '2026-07-13T10:06:00Z',
+                    'command': 'ip',
+                    'outcome': 'success',
+                    'reason': 'queried',
+                    'group_id': 'private-group-openid',
+                    'user_id': 'private-user-openid',
+                    'member_id': 'private-member-id',
+                    'request_id': 'private-request-id',
+                    'duration_ms': 42,
+                },
+                {
+                    'timestamp': '2026-07-13T10:05:00Z',
+                    'command': 'unexpected-private-command',
+                    'outcome': 'unexpected-private-outcome',
+                    'reason': 'private-untrusted-reason',
+                    'duration_ms': 5,
+                },
+            ]
+        },
+    )
+    monkeypatch.setenv('LANBOT_BUILD_REVISION', 'a' * 40)
+    monkeypatch.setenv('LANBOT_UPDATE_ENABLED', 'true')
+
+    result = await IDCReadinessService(app).get_diagnostics()
+    serialized = json.dumps(result, ensure_ascii=False)
+
+    assert result['schema_version'] == 1
+    assert result['application']['revision'] == 'a' * 40
+    assert result['application']['managed_updates'] is True
+    assert result['qq_callback']['configured_bots'] == 3
+    assert result['qq_callback']['enabled_bots'] == 2
+    assert result['qq_callback']['active_webhook_bots'] == 1
+    assert result['qq_callback']['active_websocket_bots'] == 1
+    assert result['qq_callback']['metrics']['events_total'] == 8
+    assert result['qq_callback']['metrics']['pending_events'] == 3
+    assert result['gateway'] == {
+        'available': True,
+        'configured': True,
+        'transport': 'https',
+        'verify_tls': True,
+        'service_token_configured': True,
+        'timeout_seconds': 12.0,
+        'requests_per_minute': 30,
+        'bind_attempts_per_10_minutes': 4,
+    }
+    assert result['audit']['sample_size'] == 2
+    assert result['audit']['commands']['ip'] == 1
+    assert result['audit']['commands']['unknown'] == 1
+    assert result['audit']['outcomes']['success'] == 1
+    assert result['audit']['outcomes']['unknown'] == 1
+    assert result['audit']['reasons']['queried'] == 1
+    assert result['audit']['reasons']['unknown'] == 1
+    assert result['audit']['last_event'] == {
+        'command': 'ip',
+        'outcome': 'success',
+        'reason': 'queried',
+        'duration_ms': 42,
+    }
+    app.qqofficial_status_service.get_status.assert_awaited_once_with()
+    app.idc_query_config_service.get_config.assert_awaited_once_with()
+    app.idc_query_config_service.get_audit_events.assert_awaited_once_with(100)
+    app.plugin_connector.ping_plugin_runtime.assert_awaited_once_with()
+    app.plugin_connector.get_plugin_info.assert_awaited_once_with('csbsgyl', 'idc-query')
+    assert all(secret not in serialized for secret in secrets)
+    assert {
+        'app_id',
+        'uuid',
+        'name',
+        'configured_callback_url',
+        'base_url',
+        'token',
+        'group_id',
+        'user_id',
+        'member_id',
+        'request_id',
+    }.isdisjoint(_all_keys(result))
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_degrade_without_exposing_source_exceptions():
+    secret = 'private-service-token at /private/idc/config.env'
+    app = _make_app(
+        qq_status=RuntimeError(secret),
+        ping_result=RuntimeError(secret),
+        config=OSError(secret),
+        audit=UnicodeError(secret),
+    )
+
+    result = await IDCReadinessService(app).get_diagnostics()
+    serialized = json.dumps(result)
+
+    assert result['readiness']['available'] is True
+    assert result['readiness']['status'] == 'not_ready'
+    assert result['qq_callback']['available'] is False
+    assert result['gateway']['available'] is False
+    assert result['audit']['available'] is False
+    assert secret not in serialized
+    assert '/private/idc' not in serialized

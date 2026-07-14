@@ -147,6 +147,9 @@ test.describe('authenticated app shell', () => {
     page,
   }) => {
     await installLangBotApiMocks(page, { authenticated: true });
+    await page
+      .context()
+      .grantPermissions(['clipboard-read', 'clipboard-write']);
 
     await page.goto('/home/bots');
     await page.getByRole('button', { name: 'IDC Query' }).first().click();
@@ -161,6 +164,19 @@ test.describe('authenticated app shell', () => {
     await expect(
       dialog.getByText('Required configuration is missing.'),
     ).toBeVisible();
+    await dialog.getByRole('button', { name: 'Copy diagnostics' }).click();
+    await expect(page.getByText('Diagnostics copied')).toBeVisible();
+    const diagnosticText = await page.evaluate(() =>
+      navigator.clipboard.readText(),
+    );
+    const diagnosticReport = JSON.parse(diagnosticText);
+    expect(diagnosticReport.schema_version).toBe(1);
+    expect(diagnosticReport.qq_callback.metrics.events_total).toBe(6);
+    expect(diagnosticText).not.toContain('1029384756');
+    expect(diagnosticText).not.toContain('qq-group-openid');
+    expect(diagnosticText).not.toContain('qq-member-openid');
+    expect(diagnosticText).not.toContain('query.example.com');
+    expect(diagnosticText).not.toContain('playwright-secret-token');
 
     await dialog.getByRole('tab', { name: 'Configuration' }).click();
     await expect(dialog.getByText('Gateway not configured')).toBeVisible();
@@ -254,6 +270,9 @@ test.describe('authenticated app shell', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Production readiness')).toBeVisible();
     await expect(dialog.getByText('Not ready', { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: 'Copy diagnostics' }),
+    ).toBeVisible();
 
     await dialog.getByRole('tab', { name: 'Configuration' }).click();
     await expect(dialog.getByLabel('Gateway URL')).toBeVisible();
