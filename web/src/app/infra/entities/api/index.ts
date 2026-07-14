@@ -195,11 +195,19 @@ export interface Bot {
 }
 
 export type RoutingRuleOperator =
-  'eq' | 'neq' | 'contains' | 'not_contains' | 'starts_with' | 'regex';
+  | 'eq'
+  | 'neq'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'regex';
 
 export interface PipelineRoutingRule {
   type:
-    'launcher_type' | 'launcher_id' | 'message_content' | 'message_has_element';
+    | 'launcher_type'
+    | 'launcher_id'
+    | 'message_content'
+    | 'message_has_element';
   operator: RoutingRuleOperator;
   value: string;
   pipeline_uuid: string;
@@ -352,7 +360,12 @@ export interface ApiRespSystemInfo {
 }
 
 export type SystemUpdateState =
-  'idle' | 'queued' | 'checking' | 'deploying' | 'success' | 'failed';
+  | 'idle'
+  | 'queued'
+  | 'checking'
+  | 'deploying'
+  | 'success'
+  | 'failed';
 
 export interface ApiRespSystemUpdate {
   enabled: boolean;
@@ -471,7 +484,11 @@ export interface TestIDCQueryConnection {
 }
 
 export type QQOfficialCallbackStatus =
-  'ready' | 'not_configured' | 'disabled' | 'websocket_mode' | 'conflict';
+  | 'ready'
+  | 'not_configured'
+  | 'disabled'
+  | 'websocket_mode'
+  | 'conflict';
 
 export interface QQOfficialWebhookMetrics {
   started_at: string;
