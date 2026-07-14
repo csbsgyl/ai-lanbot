@@ -20,6 +20,9 @@ tmp=$(mktemp) && (curl -fsSL --connect-timeout 8 --max-time 20 https://raw.githu
 The script deploys the production instance to `/opt/ai-lanbot` on port `5300`
 by default. Once installed, authenticated administrators can check and install
 updates from the version control in the application sidebar.
+The reverse proxy upstream is `http://127.0.0.1:5300/qq/callback`, while the
+default QQ Open Platform callback is
+`https://idc.csbsgyl.com/qq/callback`.
 
 The deployment script automatically detects whether GitHub and Docker image access work and falls back to `https://github.xiaohangyun.org` / `https://docker.xiaohangyun.org` when needed. It installs the IDC query plugin automatically and reports success only after the Plugin Runtime and HTTP health checks pass. Fresh deployments have no default username/password; open `/register` to create the first administrator account. See [docs/ONE_CLICK_DEPLOY.md](docs/ONE_CLICK_DEPLOY.md).
 

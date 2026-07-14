@@ -46,7 +46,8 @@ The script also checks Docker image access automatically. By default it starts f
 - Waits for the Plugin Runtime to become healthy before starting LangBot.
 - Waits for `/api/v1/system/info` to pass before reporting success.
 - Prints the local URL, remote URL, first-time setup URL, login URL, and maintenance commands.
-- Prints the QQ callback reverse-proxy upstream and the per-bot callback path.
+- Prints the QQ callback reverse-proxy upstream and the configured public
+  callback URL.
 - Installs a systemd path unit that accepts fixed update requests from the authenticated WebUI without mounting the host Docker socket into LangBot.
 
 ## In-App Updates
@@ -97,11 +98,19 @@ The QQ Official adapter exposes a stable callback route:
 ```
 
 Keep this path unchanged in the reverse proxy. The URL entered in the QQ
-Open Platform must therefore be an externally reachable HTTPS URL such as:
+Open Platform must therefore be an externally reachable HTTPS URL. This fork's
+production default is:
 
 ```text
-https://bot.example.com/qq/callback
+https://idc.csbsgyl.com/qq/callback
 ```
+
+The one-click script persists the corresponding public origin as
+`LANBOT_PUBLIC_URL=https://idc.csbsgyl.com` and maps it to LangBot's
+`api.webhook_prefix`. Re-running the script or using the in-app updater keeps
+that value. Set `LANBOT_PUBLIC_URL=https://bot.example.com` on the initial or
+operator-run deployment command only when the public domain changes; paths,
+query strings, fragments, credentials, and non-HTTPS origins are rejected.
 
 The route selects the enabled QQ Official bot by QQ's `X-Bot-Appid` request
 header. The existing `/bots/<bot-uuid>` route remains available for backward
@@ -126,12 +135,14 @@ New QQ Official bots default to Webhook mode. WebSocket mode remains available
 as an explicit adapter setting.
 
 After signing in, open **Settings > IDC Query > QQ callback** to copy the
-callback URL for the domain currently serving the WebUI and inspect runtime
-readiness. The page distinguishes disabled, WebSocket, ready, and App ID
-conflict states and shows content-free callback counters. It never exposes App
-Secrets, query tokens, messages, QQ group IDs, or member IDs. The diagnostics
-API requires a user login token and rejects API-key and MCP authentication.
-Counters are in-memory operational data and reset when the QQ bot restarts.
+configured HTTPS public callback and inspect runtime readiness. The page only
+falls back to the domain currently serving the WebUI when no safe HTTPS public
+callback is configured. It distinguishes disabled, WebSocket, ready, and App
+ID conflict states and shows content-free callback counters. It never exposes
+App Secrets, query tokens, messages, QQ group IDs, or member IDs. The
+diagnostics API requires a user login token and rejects API-key and MCP
+authentication. Counters are in-memory operational data and reset when the QQ
+bot restarts.
 
 Open **Settings > IDC Query > Overview** for a read-only production readiness
 summary across the enabled QQ bot, callback or WebSocket transport, Plugin
@@ -159,6 +170,7 @@ tokens only and rejects API-key and MCP authentication.
 LANBOT_INSTALL_DIR=/opt/ai-lanbot
 LANBOT_BRANCH=main
 LANBOT_HTTP_PORT=5300
+LANBOT_PUBLIC_URL=https://idc.csbsgyl.com
 LANBOT_COMPOSE_PROFILES=all
 LANBOT_DEPLOY_MODE=image
 LANBOT_ALLOW_BUILD_FALLBACK=true

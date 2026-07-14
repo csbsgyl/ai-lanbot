@@ -186,7 +186,12 @@ test.describe('authenticated app shell', () => {
     await expect(dialog.getByText('IDC QQ Bot')).toBeVisible();
     await expect(
       dialog.getByRole('textbox', { name: 'Callback URL' }),
-    ).toHaveValue(`${new URL(page.url()).origin}/qq/callback`);
+    ).toHaveValue('https://idc.csbsgyl.com/qq/callback');
+    await dialog.getByRole('button', { name: 'Copy callback URL' }).click();
+    await expect(page.getByText('Callback URL copied')).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe('https://idc.csbsgyl.com/qq/callback');
     await expect(dialog.getByText('1029384756')).toBeVisible();
     await expect(dialog.getByText('Pending events')).toBeVisible();
     await expect(dialog.getByText('0 / 256')).toBeVisible();
@@ -283,7 +288,7 @@ test.describe('authenticated app shell', () => {
     await dialog.getByRole('tab', { name: 'QQ callback' }).click();
     await expect(
       dialog.getByRole('textbox', { name: 'Callback URL' }),
-    ).toBeVisible();
+    ).toHaveValue('https://idc.csbsgyl.com/qq/callback');
     await expect(dialog.getByText('IDC QQ Bot')).toBeVisible();
 
     await dialog.getByRole('tab', { name: 'Group bindings' }).click();

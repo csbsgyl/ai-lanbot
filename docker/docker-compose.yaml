@@ -73,6 +73,7 @@ services:
       - LANBOT_UPDATE_ENABLED=${LANBOT_UPDATE_ENABLED:-false}
       - LANBOT_UPDATE_REPOSITORY=${LANBOT_UPDATE_REPOSITORY:-csbsgyl/ai-lanbot}
       - LANBOT_UPDATE_BRANCH=${LANBOT_UPDATE_BRANCH:-main}
+      - API__WEBHOOK_PREFIX=${LANBOT_PUBLIC_URL:-https://idc.csbsgyl.com}
       - BOX__ENABLED=${LANBOT_BOX_ENABLED:-false}
       # Unified env-override convention: SECTION__SUBSECTION__KEY overrides the
       # matching config.yaml field (see LoadConfigStage). These map onto

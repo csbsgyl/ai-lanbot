@@ -644,7 +644,7 @@ async function handleBackendApi(route: Route, state: LangBotApiMockState) {
     return fulfillJson(route, {
       status: 'ready',
       callback_path: '/qq/callback',
-      configured_callback_url: 'http://127.0.0.1:5300/qq/callback',
+      configured_callback_url: 'https://idc.csbsgyl.com/qq/callback',
       configured_bots: 1,
       active_webhook_bots: 1,
       bots: [

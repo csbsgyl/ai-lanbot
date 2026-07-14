@@ -121,6 +121,7 @@ load_deployment_settings() {
   local box_enabled
   export_deployment_setting "COMPOSE_PROJECT_NAME" "LANBOT_COMPOSE_PROJECT_NAME"
   export_deployment_setting "LANGBOT_HTTP_PORT" "LANBOT_HTTP_PORT"
+  export_deployment_setting "LANBOT_PUBLIC_URL" "LANBOT_PUBLIC_URL"
   export_deployment_setting "LANBOT_CONTAINER_NAME" "LANBOT_CONTAINER_NAME"
   export_deployment_setting "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME"
   export_deployment_setting "LANBOT_BOX_CONTAINER_NAME" "LANBOT_BOX_CONTAINER_NAME"

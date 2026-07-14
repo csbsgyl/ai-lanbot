@@ -15,6 +15,7 @@ ALLOW_BUILD_FALLBACK="${LANBOT_ALLOW_BUILD_FALLBACK:-true}"
 SOURCE_MODE="${LANBOT_SOURCE_MODE:-archive}"
 COMPOSE_PROFILES="${LANBOT_COMPOSE_PROFILES:-}"
 HTTP_PORT="${LANBOT_HTTP_PORT:-5300}"
+PUBLIC_URL="${LANBOT_PUBLIC_URL:-https://idc.csbsgyl.com}"
 COMPOSE_PROJECT="${LANBOT_COMPOSE_PROJECT_NAME:-docker}"
 LANGBOT_CONTAINER_NAME="${LANBOT_CONTAINER_NAME:-langbot}"
 PLUGIN_RUNTIME_CONTAINER_NAME="${LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME:-langbot_plugin_runtime}"
@@ -259,6 +260,7 @@ load_existing_deployment_settings() {
   is_managed_install_dir || return 0
   reuse_existing_deployment_setting "LANBOT_COMPOSE_PROJECT_NAME" "COMPOSE_PROJECT_NAME" "COMPOSE_PROJECT"
   reuse_existing_deployment_setting "LANBOT_HTTP_PORT" "LANGBOT_HTTP_PORT" "HTTP_PORT"
+  reuse_existing_deployment_setting "LANBOT_PUBLIC_URL" "LANBOT_PUBLIC_URL" "PUBLIC_URL"
   reuse_existing_deployment_setting "LANBOT_CONTAINER_NAME" "LANBOT_CONTAINER_NAME" "LANGBOT_CONTAINER_NAME"
   reuse_existing_deployment_setting \
     "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "PLUGIN_RUNTIME_CONTAINER_NAME"
@@ -276,6 +278,13 @@ load_existing_deployment_settings() {
     fi
   fi
   log "Reusing resource settings from the existing managed deployment."
+}
+
+validate_public_url() {
+  PUBLIC_URL="${PUBLIC_URL%/}"
+  if [[ ! "$PUBLIC_URL" =~ ^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:(80|443|8080|8443))?$ ]]; then
+    die "LANBOT_PUBLIC_URL must be an HTTPS origin without a path, query, or fragment."
+  fi
 }
 
 install_bundled_plugins() {
@@ -826,6 +835,7 @@ write_env() {
   set_env_key "$env_file" "COMPOSE_PROJECT_NAME" "$COMPOSE_PROJECT"
   set_env_key "$env_file" "LANBOT_ENVIRONMENT" "$DEPLOY_ENVIRONMENT"
   set_env_key "$env_file" "LANGBOT_HTTP_PORT" "$HTTP_PORT"
+  set_env_key "$env_file" "LANBOT_PUBLIC_URL" "$PUBLIC_URL"
   set_env_key "$env_file" "LANGBOT_BOX_ROOT" "${INSTALL_DIR}/docker/data/box"
   set_env_key "$env_file" "LANBOT_CONTAINER_NAME" "$LANGBOT_CONTAINER_NAME"
   set_env_key "$env_file" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "$PLUGIN_RUNTIME_CONTAINER_NAME"
@@ -983,10 +993,11 @@ print_success_info() {
   log "Install directory: ${INSTALL_DIR}"
   log "Local URL: ${local_url}"
   log "Remote URL: ${remote_url}"
+  log "Public URL: ${PUBLIC_URL}"
   log "QQ callback upstream (reverse proxy on this server): ${local_url}"
   log "QQ callback upstream (reverse proxy on another server): ${remote_url}"
   log "QQ callback upstream: ${local_url}/qq/callback"
-  log "QQ platform callback after HTTPS proxy: https://<your-domain>/qq/callback"
+  log "QQ platform callback after HTTPS proxy: ${PUBLIC_URL}/qq/callback"
 
   if is_initialized "$local_url"; then
     log "Admin account: already initialized."
@@ -1043,6 +1054,7 @@ main() {
   if [ "$HTTP_PORT" -lt 1 ] || [ "$HTTP_PORT" -gt 65535 ]; then
     die "LANBOT_HTTP_PORT must be between 1 and 65535."
   fi
+  validate_public_url
   case "$IMAGE_WAIT_SECONDS" in
     ''|*[!0-9]*) die "LANBOT_IMAGE_WAIT_SECONDS must be a non-negative integer." ;;
   esac
@@ -1057,6 +1069,7 @@ main() {
   log "Deployment mode: ${DEPLOY_MODE}"
   log "Install directory: ${INSTALL_DIR}"
   log "HTTP port: ${HTTP_PORT}"
+  log "Public URL: ${PUBLIC_URL}"
 
   case "$DEPLOY_MODE" in
     image|build) ;;

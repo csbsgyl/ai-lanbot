@@ -18,6 +18,7 @@ CONFIG_KEYS = (
     'mode',
     'install_dir',
     'http_port',
+    'public_url',
     'compose_project',
     'langbot_container',
     'plugin_container',
@@ -43,6 +44,7 @@ printf '%s\n' \
   "$DEPLOY_MODE" \
   "$INSTALL_DIR" \
   "$HTTP_PORT" \
+  "$PUBLIC_URL" \
   "$COMPOSE_PROJECT" \
   "$LANGBOT_CONTAINER_NAME" \
   "$PLUGIN_RUNTIME_CONTAINER_NAME" \
@@ -96,6 +98,7 @@ def test_production_is_the_only_default_deployment():
         'mode': 'image',
         'install_dir': config['install_dir'],
         'http_port': '5300',
+        'public_url': 'https://idc.csbsgyl.com',
         'compose_project': 'docker',
         'langbot_container': 'langbot',
         'plugin_container': 'langbot_plugin_runtime',
@@ -121,6 +124,7 @@ def test_repeat_deployment_reuses_resource_settings_and_respects_explicit_overri
             (
                 'COMPOSE_PROJECT_NAME=existing-project',
                 'LANGBOT_HTTP_PORT=6300',
+                'LANBOT_PUBLIC_URL=https://existing.example.com',
                 'LANBOT_CONTAINER_NAME=existing-langbot',
                 'LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME=existing-plugin-runtime',
                 'LANBOT_BOX_CONTAINER_NAME=existing-box',
@@ -140,6 +144,7 @@ load_existing_deployment_settings
 printf '%s\n' \
   "$COMPOSE_PROJECT" \
   "$HTTP_PORT" \
+  "$PUBLIC_URL" \
   "$LANGBOT_CONTAINER_NAME" \
   "$PLUGIN_RUNTIME_CONTAINER_NAME" \
   "$BOX_CONTAINER_NAME" \
@@ -165,15 +170,17 @@ printf '%s\n' \
         env={
             **env,
             'LANBOT_HTTP_PORT': '7300',
+            'LANBOT_PUBLIC_URL': 'https://override.example.com:8443',
             'LANBOT_CONTAINER_NAME': 'override-langbot',
             'LANBOT_COMPOSE_PROFILES': '',
         },
         text=True,
     ).stdout.splitlines()
 
-    assert reused[-9:] == [
+    assert reused[-10:] == [
         'existing-project',
         '6300',
+        'https://existing.example.com',
         'existing-langbot',
         'existing-plugin-runtime',
         'existing-box',
@@ -182,9 +189,10 @@ printf '%s\n' \
         'all',
         'git',
     ]
-    assert overridden[-9:] == [
+    assert overridden[-10:] == [
         'existing-project',
         '7300',
+        'https://override.example.com:8443',
         'override-langbot',
         'existing-plugin-runtime',
         'existing-box',
@@ -208,6 +216,35 @@ def test_test_deployment_mode_is_rejected():
 
     assert result.returncode != 0
     assert 'production only' in result.stderr
+
+
+def test_public_url_is_normalized_and_rejects_unsafe_origins():
+    if BASH is None:
+        pytest.skip('bash is required to exercise the Linux deployment script')
+
+    command = r"""
+source "$1"
+PUBLIC_URL='https://bot.example.com/'
+validate_public_url
+printf '%s\n' "$PUBLIC_URL"
+if (PUBLIC_URL='http://bot.example.com'; validate_public_url); then exit 1; fi
+if (PUBLIC_URL='https://bot.example.com/path'; validate_public_url); then exit 1; fi
+if (PUBLIC_URL='https://bot.example.com?mode=qq'; validate_public_url); then exit 1; fi
+if (PUBLIC_URL='https://bot.example.com#callback'; validate_public_url); then exit 1; fi
+if (PUBLIC_URL='https://user:pass@bot.example.com'; validate_public_url); then exit 1; fi
+if (PUBLIC_URL='https://bot.example.com:444'; validate_public_url); then exit 1; fi
+"""
+    env = os.environ.copy()
+    env['PATH'] = os.pathsep.join((str(Path(BASH).parent), env.get('PATH', '')))
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT)],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == ['https://bot.example.com']
 
 
 def test_target_revision_pins_the_downloaded_source():
@@ -308,6 +345,7 @@ def test_compose_files_parameterize_environment_specific_resources():
     assert services['langbot_box']['container_name'] == '${LANBOT_BOX_CONTAINER_NAME:-langbot_box}'
     assert services['langbot_plugin_runtime']['ports'] == ['${LANBOT_PLUGIN_DEBUG_PORT:-5401}:5401']
     assert 'LANBOT_UPDATE_ENABLED=${LANBOT_UPDATE_ENABLED:-false}' in services['langbot']['environment']
+    assert 'API__WEBHOOK_PREFIX=${LANBOT_PUBLIC_URL:-https://idc.csbsgyl.com}' in services['langbot']['environment']
     assert './data/update:/app/data/update:ro' in services['langbot']['volumes']
 
     expected_ports = [
@@ -331,6 +369,7 @@ def test_host_updater_is_fixed_to_the_managed_deployment():
     assert '/var/run/docker.sock' not in host_script
     assert 'LANBOT_HTTP_PORT' in host_script
     assert 'LANBOT_COMPOSE_PROFILES' in host_script
+    assert 'LANBOT_PUBLIC_URL' in host_script
     assert 'commits/${REPO_BRANCH}.atom' in host_script
     assert "'application/vnd.github.sha'" in host_script
     assert '--max-filesize 524288' in host_script
@@ -419,7 +458,7 @@ def test_deployment_prints_qq_callback_reverse_proxy_details():
     assert 'QQ callback upstream (reverse proxy on this server): ${local_url}' in script
     assert 'QQ callback upstream (reverse proxy on another server): ${remote_url}' in script
     assert 'QQ callback upstream: ${local_url}/qq/callback' in script
-    assert 'https://<your-domain>/qq/callback' in script
+    assert 'QQ platform callback after HTTPS proxy: ${PUBLIC_URL}/qq/callback' in script
     assert 'Backup: ${INSTALL_DIR}/scripts/data-backup.sh create ${INSTALL_DIR}' in script
     assert 'Restore: ${INSTALL_DIR}/scripts/data-backup.sh restore <archive.tar.gz> ${INSTALL_DIR}' in script
 

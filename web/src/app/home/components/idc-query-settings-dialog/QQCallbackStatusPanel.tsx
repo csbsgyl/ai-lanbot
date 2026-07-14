@@ -34,6 +34,28 @@ function statusVariant(
   return 'outline';
 }
 
+function resolveCallbackUrl(status: ApiRespQQOfficialStatus): string {
+  const browserCallbackUrl = `${window.location.origin}${status.callback_path}`;
+  if (!status.configured_callback_url) return browserCallbackUrl;
+
+  try {
+    const configuredUrl = new URL(status.configured_callback_url);
+    if (
+      configuredUrl.protocol === 'https:' &&
+      !configuredUrl.username &&
+      !configuredUrl.password &&
+      !configuredUrl.search &&
+      !configuredUrl.hash &&
+      configuredUrl.pathname === status.callback_path
+    ) {
+      return configuredUrl.toString();
+    }
+  } catch {
+    // Fall back to the origin serving the dashboard.
+  }
+  return browserCallbackUrl;
+}
+
 export default function QQCallbackStatusPanel({
   status,
   loading,
@@ -43,7 +65,7 @@ export default function QQCallbackStatusPanel({
   const { t } = useTranslation();
   const callbackUrl = useMemo(() => {
     if (!status) return '';
-    return `${window.location.origin}${status.callback_path}`;
+    return resolveCallbackUrl(status);
   }, [status]);
 
   const copyCallbackUrl = async () => {
