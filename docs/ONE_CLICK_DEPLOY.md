@@ -21,10 +21,14 @@ The script also checks Docker image access automatically. By default it starts f
 - Downloads or updates `csbsgyl/ai-lanbot`.
 - Deploys the production instance without requiring a deployment mode argument.
 - Starts from an immutable commit-tagged image when available.
+- Confirms and pulls the target image before replacing managed source or
+  bundled plugin files.
 - Falls back to a local source build when no production image is reachable.
 - Automatically uses the Docker accelerator for runtime/base images when direct Docker access is unavailable and the accelerator exposes the required image.
 - Starts the LangBot and Plugin Runtime core services without the optional Box profile.
 - Installs or updates the bundled IDC query plugin under `docker/data/plugins/idc_query`.
+- Stages archive and bundled-plugin updates beside the existing deployment,
+  then swaps them into place while preserving `docker/data` and `docker/.env`.
 - Adds authenticated IDC gateway configuration under WebUI **Settings > IDC Query**.
 - Preserves IDC group bindings separately under `docker/data/idc-query` during source updates.
 - Keeps persistent data under `docker/data`.
@@ -51,8 +55,10 @@ Update status is stored in
 
 Managed updates download the updater and source from the same immutable commit
 SHA and require that commit's published Docker image. They fail without
-replacing the running container when the image is not available; local source
-build fallback remains available only for an operator-run one-click deployment.
+replacing the running container, managed source, or bundled plugin when the
+image is not available. Deployment and managed-update runs for the same install
+directory are serialized when the host provides `flock`. Local source build
+fallback remains available only for an operator-run one-click deployment.
 
 ## Login After Deployment
 

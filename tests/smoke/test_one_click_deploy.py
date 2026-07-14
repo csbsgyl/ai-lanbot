@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -57,6 +58,34 @@ printf '%s\n' \
         text=True,
     )
     return dict(zip(CONFIG_KEYS, result.stdout.splitlines(), strict=True))
+
+
+def create_deployment_archive(tmp_path: Path) -> Path:
+    source = tmp_path / 'archive-source'
+    (source / 'docker').mkdir(parents=True)
+    (source / 'scripts').mkdir()
+    (source / 'pyproject.toml').write_text('[project]\nname = "ai-lanbot"\n', encoding='utf-8')
+    (source / 'docker' / 'docker-compose.yaml').write_text('services: {}\n', encoding='utf-8')
+    (source / 'scripts' / 'one-click-deploy.sh').write_text('#!/usr/bin/env bash\n', encoding='utf-8')
+    (source / 'new-source.txt').write_text('new source\n', encoding='utf-8')
+
+    archive = tmp_path / 'source.tar.gz'
+    with tarfile.open(archive, 'w:gz') as file:
+        file.add(source, arcname='ai-lanbot-revision')
+    return archive
+
+
+def create_managed_install(tmp_path: Path) -> Path:
+    install_dir = tmp_path / 'ai-lanbot'
+    (install_dir / 'docker' / 'data' / 'idc-query').mkdir(parents=True)
+    (install_dir / 'scripts').mkdir()
+    (install_dir / 'pyproject.toml').write_text('[project]\nname = "ai-lanbot"\n', encoding='utf-8')
+    (install_dir / 'docker' / 'docker-compose.yaml').write_text('services: {}\n', encoding='utf-8')
+    (install_dir / 'docker' / '.env').write_text('LANGBOT_HTTP_PORT=5300\n', encoding='utf-8')
+    (install_dir / 'docker' / 'data' / 'idc-query' / 'bindings.json').write_text('{}\n', encoding='utf-8')
+    (install_dir / 'scripts' / 'one-click-deploy.sh').write_text('#!/usr/bin/env bash\n', encoding='utf-8')
+    (install_dir / 'old-source.txt').write_text('old source\n', encoding='utf-8')
+    return install_dir
 
 
 def test_production_is_the_only_default_deployment():
@@ -164,6 +193,83 @@ def test_host_updater_is_fixed_to_the_managed_deployment():
     assert '/var/run/docker.sock' not in host_script
     assert 'LANBOT_HTTP_PORT' in host_script
     assert 'LANBOT_COMPOSE_PROFILES' in host_script
+
+
+def test_runtime_image_is_preflighted_before_source_replacement():
+    script = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    main_body = script.split('main() {', maxsplit=1)[1]
+
+    assert main_body.index('runtime_image="$(resolve_runtime_image)"') < main_body.index('\n  fetch_source')
+    assert main_body.index('prepare_runtime_image "$runtime_image"') < main_body.index('\n  fetch_source')
+    assert 'acquire_deployment_lock' in main_body
+
+
+def test_host_updater_files_are_installed_atomically():
+    script = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+
+    assert 'install_root_file_atomically "${INSTALL_DIR}/scripts/host-update.sh" "$HOST_UPDATER_PATH" 0755' in script
+    assert 'as_root install -m 0755 "${INSTALL_DIR}/scripts/host-update.sh" "$HOST_UPDATER_PATH"' not in script
+
+
+@pytest.mark.skipif(BASH is None, reason='bash is required to exercise staged source replacement')
+def test_archive_upgrade_preserves_data_and_environment(tmp_path):
+    archive = create_deployment_archive(tmp_path)
+    install_dir = create_managed_install(tmp_path)
+    command = r"""
+source "$1"
+INSTALL_DIR="$2"
+ARCHIVE="$3"
+download_archive() { cp "$ARCHIVE" "$1"; }
+install_from_archive
+"""
+
+    subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT), str(install_dir), str(archive)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert (install_dir / 'new-source.txt').read_text(encoding='utf-8') == 'new source\n'
+    assert not (install_dir / 'old-source.txt').exists()
+    assert (install_dir / 'docker' / '.env').read_text(encoding='utf-8') == 'LANGBOT_HTTP_PORT=5300\n'
+    assert (install_dir / 'docker' / 'data' / 'idc-query' / 'bindings.json').read_text(encoding='utf-8') == '{}\n'
+    assert not list(tmp_path.glob('.ai-lanbot.stage.*'))
+    assert not list(tmp_path.glob('.ai-lanbot.backup.*'))
+
+
+@pytest.mark.skipif(BASH is None, reason='bash is required to exercise staged source rollback')
+def test_archive_upgrade_restores_previous_install_when_activation_fails(tmp_path):
+    archive = create_deployment_archive(tmp_path)
+    install_dir = create_managed_install(tmp_path)
+    command = r"""
+source "$1"
+INSTALL_DIR="$2"
+ARCHIVE="$3"
+download_archive() { cp "$ARCHIVE" "$1"; }
+mv() {
+  if [ "$#" -eq 2 ] && [ "$2" = "$INSTALL_DIR" ] && [[ "$1" == *'.ai-lanbot.stage.'* ]]; then
+    return 1
+  fi
+  command mv "$@"
+}
+install_from_archive
+"""
+
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT), str(install_dir), str(archive)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert (install_dir / 'old-source.txt').read_text(encoding='utf-8') == 'old source\n'
+    assert not (install_dir / 'new-source.txt').exists()
+    assert (install_dir / 'docker' / '.env').read_text(encoding='utf-8') == 'LANGBOT_HTTP_PORT=5300\n'
+    assert (install_dir / 'docker' / 'data' / 'idc-query' / 'bindings.json').read_text(encoding='utf-8') == '{}\n'
+    assert not list(tmp_path.glob('.ai-lanbot.stage.*'))
+    assert not list(tmp_path.glob('.ai-lanbot.backup.*'))
 
 
 def test_deployment_prints_qq_callback_reverse_proxy_details():

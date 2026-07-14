@@ -85,6 +85,38 @@ as_root() {
   fi
 }
 
+install_root_file_atomically() {
+  local source="$1"
+  local destination="$2"
+  local mode="$3"
+  local temporary="${destination}.tmp.$$"
+
+  if ! as_root install -m "$mode" "$source" "$temporary"; then
+    as_root rm -f "$temporary" || true
+    return 1
+  fi
+  if ! as_root mv -f "$temporary" "$destination"; then
+    as_root rm -f "$temporary" || true
+    return 1
+  fi
+}
+
+acquire_deployment_lock() {
+  local lock_file="${INSTALL_DIR}.deploy.lock"
+
+  if ! command -v flock >/dev/null 2>&1; then
+    log "The flock command is unavailable; concurrent deployment protection is disabled."
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$lock_file")"
+  if ! exec 9>"$lock_file"; then
+    die "Could not open the deployment lock file."
+  fi
+  chmod 600 "$lock_file"
+  flock -n 9 || die "Another deployment or managed update is already running for ${INSTALL_DIR}."
+}
+
 compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
     echo "docker compose"
@@ -204,13 +236,41 @@ install_bundled_plugins() {
   local source_dir="${INSTALL_DIR}/bundled_plugins/idc_query"
   local plugin_dir="${INSTALL_DIR}/docker/data/plugins/idc_query"
   local state_dir="${INSTALL_DIR}/docker/data/idc-query"
+  local plugin_parent staged_dir backup_root backup_dir
 
   [ -f "${source_dir}/manifest.yaml" ] || die "Bundled IDC query plugin is missing from the source tree."
-  mkdir -p "$(dirname "$plugin_dir")" "$state_dir"
-  rm -rf "$plugin_dir"
-  mkdir -p "$plugin_dir"
-  cp -a "${source_dir}/." "$plugin_dir/"
+  plugin_parent="$(dirname "$plugin_dir")"
+  mkdir -p "$plugin_parent" "$state_dir"
   chmod 700 "$state_dir"
+  staged_dir="$(mktemp -d "${plugin_parent}/.idc-query.stage.XXXXXX")"
+  if ! cp -a "${source_dir}/." "$staged_dir/"; then
+    rm -rf "$staged_dir"
+    die "Could not stage the bundled IDC query plugin."
+  fi
+  chmod 755 "$staged_dir"
+
+  backup_root=""
+  if [ -e "$plugin_dir" ] || [ -L "$plugin_dir" ]; then
+    backup_root="$(mktemp -d "${plugin_parent}/.idc-query.backup.XXXXXX")"
+    backup_dir="${backup_root}/plugin"
+    if ! mv "$plugin_dir" "$backup_dir"; then
+      rm -rf "$staged_dir" "$backup_root"
+      die "Could not preserve the existing IDC query plugin."
+    fi
+  fi
+
+  if ! mv "$staged_dir" "$plugin_dir"; then
+    if [ -n "$backup_root" ]; then
+      mv "$backup_dir" "$plugin_dir" || die "IDC plugin activation failed and the previous plugin could not be restored."
+      rm -rf "$backup_root"
+    fi
+    rm -rf "$staged_dir"
+    die "Could not activate the bundled IDC query plugin."
+  fi
+
+  if [ -n "$backup_root" ]; then
+    rm -rf "$backup_root" || log "The previous IDC plugin staging directory could not be removed."
+  fi
   log "Installed bundled IDC query plugin."
 }
 
@@ -380,6 +440,18 @@ resolve_runtime_image() {
   done
 }
 
+prepare_runtime_image() {
+  local runtime_image="$1"
+
+  if [ -n "${LANBOT_IMAGE:-}" ] && docker image inspect "$runtime_image" >/dev/null 2>&1; then
+    log "Custom runtime image is already available locally: ${runtime_image}"
+    return 0
+  fi
+
+  log "Pulling the selected runtime image before changing the managed source tree: ${runtime_image}"
+  run_with_timeout 900s docker pull "$runtime_image"
+}
+
 resolve_docker_image_prefix() {
   if [ -n "${LANBOT_DOCKER_IMAGE_PREFIX:-}" ]; then
     printf '%s' "$LANBOT_DOCKER_IMAGE_PREFIX"
@@ -417,46 +489,144 @@ download_archive() {
   fi
 }
 
+restore_staged_install() {
+  local backup_root="$1"
+  local backup_dir="$2"
+  local staged_dir="$3"
+  local preserved_data="$4"
+  local preserved_env="$5"
+  local restore_failed="false"
+
+  mkdir -p "${backup_dir}/docker" || restore_failed="true"
+  if [ "$preserved_data" = "true" ]; then
+    if [ -d "${staged_dir}/docker/data" ]; then
+      mv "${staged_dir}/docker/data" "${backup_dir}/docker/data" || restore_failed="true"
+    else
+      restore_failed="true"
+    fi
+  fi
+  if [ "$preserved_env" = "true" ]; then
+    if [ -f "${staged_dir}/docker/.env" ]; then
+      mv "${staged_dir}/docker/.env" "${backup_dir}/docker/.env" || restore_failed="true"
+    else
+      restore_failed="true"
+    fi
+  fi
+  if [ ! -e "$INSTALL_DIR" ] && [ ! -L "$INSTALL_DIR" ]; then
+    mv "$backup_dir" "$INSTALL_DIR" || restore_failed="true"
+  else
+    restore_failed="true"
+  fi
+
+  if [ "$restore_failed" = "true" ]; then
+    return 1
+  fi
+  rm -rf "$staged_dir" "$backup_root" || log "Source restore completed, but a staging directory remains."
+}
+
 install_from_archive() {
-  local tmp_dir archive extracted backup_dir
+  local tmp_dir archive extracted install_parent staged_dir backup_root backup_dir
+  local preserved_data="false"
+  local preserved_env="false"
+
+  install_parent="$(dirname "$INSTALL_DIR")"
+  mkdir -p "$install_parent"
   tmp_dir="$(mktemp -d)"
   archive="${tmp_dir}/${REPO_NAME}.tar.gz"
   download_archive "$archive"
-  tar -xzf "$archive" -C "$tmp_dir"
-  extracted="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-  [ -n "$extracted" ] || die "Downloaded archive did not contain a source directory."
+  if ! tar -xzf "$archive" -C "$tmp_dir"; then
+    rm -rf "$tmp_dir"
+    die "Downloaded source archive could not be extracted."
+  fi
+  extracted="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+  if [ -z "$extracted" ] \
+    || [ ! -f "${extracted}/pyproject.toml" ] \
+    || [ ! -f "${extracted}/docker/docker-compose.yaml" ] \
+    || [ ! -f "${extracted}/scripts/one-click-deploy.sh" ]; then
+    rm -rf "$tmp_dir"
+    die "Downloaded archive did not contain a valid ai-lanbot source tree."
+  fi
+
+  staged_dir="$(mktemp -d "${install_parent}/.${REPO_NAME}.stage.XXXXXX")"
+  if ! cp -a "${extracted}/." "$staged_dir/"; then
+    rm -rf "$staged_dir" "$tmp_dir"
+    die "Could not stage the downloaded source tree."
+  fi
+  chmod 755 "$staged_dir"
+  if [ -e "${staged_dir}/docker/data" ] || [ -e "${staged_dir}/docker/.env" ]; then
+    rm -rf "$staged_dir" "$tmp_dir"
+    die "Downloaded source archive unexpectedly contained deployment data."
+  fi
 
   if [ -d "$INSTALL_DIR" ] && is_managed_install_dir; then
-    log "Replacing managed source tree while preserving docker/data and docker/.env."
-    backup_dir="$(mktemp -d)"
-    mkdir -p "${backup_dir}/docker"
-    [ -d "${INSTALL_DIR}/docker/data" ] && mv "${INSTALL_DIR}/docker/data" "${backup_dir}/docker/data"
-    [ -f "${INSTALL_DIR}/docker/.env" ] && mv "${INSTALL_DIR}/docker/.env" "${backup_dir}/docker/.env"
-    find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    log "Activating a staged source tree while preserving docker/data and docker/.env."
+    backup_root="$(mktemp -d "${install_parent}/.${REPO_NAME}.backup.XXXXXX")"
+    backup_dir="${backup_root}/source"
+    if ! mv "$INSTALL_DIR" "$backup_dir"; then
+      rm -rf "$staged_dir" "$backup_root" "$tmp_dir"
+      die "Could not preserve the existing managed source tree."
+    fi
+
+    if [ -d "${backup_dir}/docker/data" ]; then
+      if mv "${backup_dir}/docker/data" "${staged_dir}/docker/data"; then
+        preserved_data="true"
+      else
+        if ! restore_staged_install "$backup_root" "$backup_dir" "$staged_dir" "$preserved_data" "$preserved_env"; then
+          rm -rf "$tmp_dir"
+          die "Data preservation failed and the previous installation could not be restored automatically."
+        fi
+        rm -rf "$tmp_dir"
+        die "Could not preserve the deployment data directory."
+      fi
+    fi
+    if [ -f "${backup_dir}/docker/.env" ]; then
+      if mv "${backup_dir}/docker/.env" "${staged_dir}/docker/.env"; then
+        preserved_env="true"
+      else
+        if ! restore_staged_install "$backup_root" "$backup_dir" "$staged_dir" "$preserved_data" "$preserved_env"; then
+          rm -rf "$tmp_dir"
+          die "Environment preservation failed and the previous installation could not be restored automatically."
+        fi
+        rm -rf "$tmp_dir"
+        die "Could not preserve the deployment environment file."
+      fi
+    fi
+
+    if ! mv "$staged_dir" "$INSTALL_DIR"; then
+      if ! restore_staged_install "$backup_root" "$backup_dir" "$staged_dir" "$preserved_data" "$preserved_env"; then
+        rm -rf "$tmp_dir"
+        die "Source activation failed and the previous installation could not be restored automatically."
+      fi
+      rm -rf "$tmp_dir"
+      die "Could not activate the staged source tree; the previous installation was restored."
+    fi
+
+    rm -rf "$backup_root" || log "The previous source staging directory could not be removed."
   else
-    backup_dir=""
-    mkdir -p "$INSTALL_DIR"
+    if [ -e "$INSTALL_DIR" ] || [ -L "$INSTALL_DIR" ]; then
+      if [ ! -d "$INSTALL_DIR" ] || [ -n "$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        rm -rf "$staged_dir" "$tmp_dir"
+        die "Install directory is not empty and is not an ai-lanbot install: ${INSTALL_DIR}"
+      fi
+      rmdir "$INSTALL_DIR"
+    fi
+    if ! mv "$staged_dir" "$INSTALL_DIR"; then
+      rm -rf "$staged_dir" "$tmp_dir"
+      die "Could not activate the downloaded source tree."
+    fi
   fi
 
-  shopt -s dotglob
-  mv "${extracted}"/* "$INSTALL_DIR"/
-  shopt -u dotglob
-
-  if [ -n "$backup_dir" ]; then
-    mkdir -p "${INSTALL_DIR}/docker"
-    [ -d "${backup_dir}/docker/data" ] && mv "${backup_dir}/docker/data" "${INSTALL_DIR}/docker/data"
-    [ -f "${backup_dir}/docker/.env" ] && mv "${backup_dir}/docker/.env" "${INSTALL_DIR}/docker/.env"
-    rm -rf "$backup_dir"
-  fi
-
-  rm -rf "$tmp_dir"
+  rm -rf "$tmp_dir" || log "The downloaded source temporary directory could not be removed."
 }
 
 fetch_source() {
   local repo_url="${GITHUB_BASE}/${REPO_SLUG}.git"
   local source_ref="${TARGET_REVISION:-$REPO_BRANCH}"
 
+  [ ! -L "$INSTALL_DIR" ] || die "Symbolic-link install directories are not supported: ${INSTALL_DIR}"
+
   if [ -d "${INSTALL_DIR}/.git" ]; then
+    is_managed_install_dir || die "Existing Git checkout is not an ai-lanbot install: ${INSTALL_DIR}"
     log "Updating existing checkout at ${INSTALL_DIR}."
     git -C "$INSTALL_DIR" remote set-url origin "$repo_url"
     if run_with_timeout 90s git -C "$INSTALL_DIR" fetch --depth 1 origin "$source_ref" \
@@ -538,9 +708,11 @@ install_host_updater() {
     "${template_dir}/ai-lanbot-update.path.in" > "${tmp_dir}/ai-lanbot-update.path"
 
   if ! as_root install -d -m 0755 "$(dirname "$HOST_UPDATER_PATH")" \
-    || ! as_root install -m 0755 "${INSTALL_DIR}/scripts/host-update.sh" "$HOST_UPDATER_PATH" \
-    || ! as_root install -m 0644 "${tmp_dir}/ai-lanbot-update.service" /etc/systemd/system/ai-lanbot-update.service \
-    || ! as_root install -m 0644 "${tmp_dir}/ai-lanbot-update.path" /etc/systemd/system/ai-lanbot-update.path \
+    || ! install_root_file_atomically "${INSTALL_DIR}/scripts/host-update.sh" "$HOST_UPDATER_PATH" 0755 \
+    || ! install_root_file_atomically \
+      "${tmp_dir}/ai-lanbot-update.service" /etc/systemd/system/ai-lanbot-update.service 0644 \
+    || ! install_root_file_atomically \
+      "${tmp_dir}/ai-lanbot-update.path" /etc/systemd/system/ai-lanbot-update.path 0644 \
     || ! as_root systemctl daemon-reload \
     || ! as_root systemctl enable --now ai-lanbot-update.path; then
     rm -rf "$tmp_dir"
@@ -804,13 +976,12 @@ main() {
     *) die "Unsupported LANBOT_COMPOSE_PROFILES=${COMPOSE_PROFILES}. Use box, all, or leave it empty." ;;
   esac
 
+  acquire_deployment_lock
+
   if [ ! -d "${INSTALL_DIR}/docker" ]; then
     check_port
   fi
   ensure_docker_ready
-  fetch_source
-  install_bundled_plugins
-  install_host_updater
 
   if [ "$DEPLOY_MODE" = "image" ]; then
     if ! runtime_image="$(resolve_runtime_image)"; then
@@ -820,8 +991,20 @@ main() {
       else
         die "No prebuilt image was reachable. Set LANBOT_DEPLOY_MODE=build to build locally."
       fi
+    elif ! prepare_runtime_image "$runtime_image"; then
+      if [ "$ALLOW_BUILD_FALLBACK" = "true" ]; then
+        log "The selected image could not be pulled. Falling back to source build; this can be slow."
+        runtime_image=""
+        DEPLOY_MODE="build"
+      else
+        die "The selected prebuilt image could not be pulled; the existing deployment was not changed."
+      fi
     fi
   fi
+
+  fetch_source
+  install_bundled_plugins
+  install_host_updater
 
   write_env "$runtime_image"
   remove_disabled_box
