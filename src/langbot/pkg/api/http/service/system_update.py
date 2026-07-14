@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -27,6 +28,10 @@ BRANCH_PATTERN = re.compile(r'^[A-Za-z0-9._/-]{1,128}$')
 ACTIVE_STATES = {'queued', 'checking', 'deploying'}
 KNOWN_STATES = ACTIVE_STATES | {'idle', 'success', 'failed'}
 CACHE_SECONDS = 60
+MAX_REVISION_RESPONSE_BYTES = 512 * 1024
+REVISION_READ_CHUNK_BYTES = 64 * 1024
+ATOM_NAMESPACE = 'http://www.w3.org/2005/Atom'
+ATOM_COMMIT_ID_PREFIX = 'tag:github.com,2008:Grit::Commit/'
 
 
 class UpdateDisabledError(RuntimeError):
@@ -120,12 +125,19 @@ class SystemUpdateService:
 
             repository = self._repository()
             branch = self._branch()
-            api_url = f'https://api.github.com/repos/{repository}/commits/{quote(branch, safe="")}'
-            urls = (api_url, f'{GITHUB_ACCELERATOR}/{api_url}')
+            encoded_branch = quote(branch, safe='')
+            atom_url = f'https://github.com/{repository}/commits/{encoded_branch}.atom'
+            api_url = f'https://api.github.com/repos/{repository}/commits/{encoded_branch}'
+            sources = (
+                (atom_url, 'atom'),
+                (f'{GITHUB_ACCELERATOR}/{atom_url}', 'atom'),
+                (api_url, 'api'),
+                (f'{GITHUB_ACCELERATOR}/{api_url}', 'api'),
+            )
             errors = []
-            for url in urls:
+            for url, response_format in sources:
                 try:
-                    revision = await self._fetch_revision(url)
+                    revision = await self._fetch_revision(url, response_format=response_format)
                     self._cached_revision = revision
                     self._cache_time = time.monotonic()
                     return revision
@@ -135,31 +147,82 @@ class SystemUpdateService:
             self.ap.logger.warning(f'Failed to check application update revision: {errors}')
             raise UpdateCheckError('Could not reach the update repository.')
 
-    async def _fetch_revision(self, url: str) -> str:
+    async def _fetch_revision(self, url: str, *, response_format: str = 'api') -> str:
         session = httpclient.get_session(trust_env=True)
         timeout = aiohttp.ClientTimeout(total=15)
+        accept = 'application/atom+xml' if response_format == 'atom' else 'application/vnd.github.sha'
         async with session.get(
             url,
             headers={
-                'Accept': 'application/vnd.github.sha',
+                'Accept': accept,
                 'User-Agent': 'ai-lanbot-update-check',
             },
             timeout=timeout,
         ) as response:
             response.raise_for_status()
-            body = (await response.text()).strip()
+            body = await self._read_limited_response(response)
 
-        revision = self._normalize_revision(body)
+        if response_format == 'atom':
+            return self._parse_atom_revision(body)
+        if response_format != 'api':
+            raise ValueError('Unsupported update revision response format.')
+        return self._parse_api_revision(body)
+
+    @staticmethod
+    async def _read_limited_response(response: aiohttp.ClientResponse) -> bytes:
+        content_length = response.content_length
+        if isinstance(content_length, int) and content_length > MAX_REVISION_RESPONSE_BYTES:
+            raise ValueError('Update repository response is too large.')
+
+        chunks: list[bytes] = []
+        total_bytes = 0
+        async for chunk in response.content.iter_chunked(REVISION_READ_CHUNK_BYTES):
+            total_bytes += len(chunk)
+            if total_bytes > MAX_REVISION_RESPONSE_BYTES:
+                raise ValueError('Update repository response is too large.')
+            chunks.append(chunk)
+        return b''.join(chunks)
+
+    @classmethod
+    def _parse_api_revision(cls, body: bytes) -> str:
+        try:
+            text = body.decode('utf-8').strip()
+        except UnicodeDecodeError as exc:
+            raise ValueError('Update repository returned an invalid revision.') from exc
+
+        revision = cls._normalize_revision(text)
         if revision:
             return revision
 
         try:
-            payload = json.loads(body)
-        except json.JSONDecodeError as exc:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError('Update repository returned an invalid revision.') from exc
-        revision = self._normalize_revision(payload.get('sha', '') if isinstance(payload, dict) else '')
+        revision = cls._normalize_revision(payload.get('sha', '') if isinstance(payload, dict) else '')
         if not revision:
             raise ValueError('Update repository returned an invalid revision.')
+        return revision
+
+    @classmethod
+    def _parse_atom_revision(cls, body: bytes) -> str:
+        upper_body = body.upper()
+        if b'<!DOCTYPE' in upper_body or b'<!ENTITY' in upper_body:
+            raise ValueError('Update repository returned an unsafe Atom feed.')
+        try:
+            root = ElementTree.fromstring(body)
+        except ElementTree.ParseError as exc:
+            raise ValueError('Update repository returned an invalid Atom feed.') from exc
+
+        namespace = f'{{{ATOM_NAMESPACE}}}'
+        if root.tag != f'{namespace}feed':
+            raise ValueError('Update repository returned an invalid Atom feed.')
+        entry = root.find(f'{namespace}entry')
+        commit_id = entry.findtext(f'{namespace}id') if entry is not None else None
+        if not isinstance(commit_id, str) or not commit_id.startswith(ATOM_COMMIT_ID_PREFIX):
+            raise ValueError('Update repository Atom feed has no current revision.')
+        revision = cls._normalize_revision(commit_id.removeprefix(ATOM_COMMIT_ID_PREFIX))
+        if not revision:
+            raise ValueError('Update repository Atom feed has an invalid revision.')
         return revision
 
     def _read_status(self) -> dict[str, str]:

@@ -13,6 +13,12 @@ The production deployment uses `/opt/ai-lanbot`, HTTP port `5300`, plugin debug 
 
 The command tries the official raw GitHub URL first and then falls back to the accelerator for downloading the script itself. The direct-download attempt has a short timeout so users in regions with slow GitHub access do not need to wait indefinitely. After the script starts, it automatically checks whether GitHub direct repository download works. If direct download is unavailable or too slow, it uses `https://github.xiaohangyun.org` to download the repository archive.
 
+The deployment resolves `main` to an immutable commit through GitHub's public
+Atom feed first, with direct and accelerated GitHub API requests retained as
+fallbacks. Revision responses are size limited and must contain a valid
+40-character commit SHA. This keeps source and image pinning available when a
+server's shared public IP has exhausted GitHub's anonymous API quota.
+
 The script also checks Docker image access automatically. By default it starts from a prebuilt fork image for speed. If a Docker Hub image is available and Docker Hub direct access is slow or unavailable, it can use `https://docker.xiaohangyun.org` for the runtime image. When a local source build is requested or used as a fallback, it writes `LANBOT_DOCKER_IMAGE_PREFIX=docker.xiaohangyun.org/library/` to `docker/.env` when the required base images are available through the accelerator. Users do not need to enter either accelerator URL.
 
 ## What It Does
@@ -64,6 +70,9 @@ replacing the running container, managed source, or bundled plugin when the
 image is not available. Deployment and managed-update runs for the same install
 directory are serialized when the host provides `flock`. Local source build
 fallback remains available only for an operator-run one-click deployment.
+Both the WebUI check and host updater use the public Atom feed before falling
+back to the anonymous GitHub API, so an API rate-limit response does not by
+itself disable update checks.
 
 ## Login After Deployment
 

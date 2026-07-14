@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from langbot.pkg.api.http.service.system_update import (
+    MAX_REVISION_RESPONSE_BYTES,
     SystemUpdateService,
     UpdateDisabledError,
     UpdateInProgressError,
@@ -118,6 +119,67 @@ async def test_latest_revision_is_cached(update_service: SystemUpdateService):
     assert first == LATEST_REVISION
     assert second == LATEST_REVISION
     update_service._fetch_revision.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_latest_revision_falls_back_from_atom_to_api(update_service: SystemUpdateService):
+    calls = []
+
+    async def fetch_revision(url: str, *, response_format: str = 'api') -> str:
+        calls.append((url, response_format))
+        if response_format == 'atom':
+            raise ValueError('Atom unavailable')
+        return LATEST_REVISION
+
+    update_service._fetch_revision = fetch_revision
+
+    assert await update_service.get_latest_revision() == LATEST_REVISION
+    assert [response_format for _, response_format in calls] == ['atom', 'atom', 'api']
+    assert calls[0][0] == 'https://github.com/csbsgyl/ai-lanbot/commits/main.atom'
+
+
+def test_atom_revision_parser_reads_the_first_feed_entry(update_service: SystemUpdateService):
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><id>tag:github.com,2008:Grit::Commit/{LATEST_REVISION}</id></entry>
+  <entry><id>tag:github.com,2008:Grit::Commit/{CURRENT_REVISION}</id></entry>
+</feed>""".encode()
+
+    assert update_service._parse_atom_revision(feed) == LATEST_REVISION
+
+
+@pytest.mark.parametrize(
+    'feed',
+    [
+        b'<html></html>',
+        b'<feed xmlns="http://www.w3.org/2005/Atom"></feed>',
+        b'<!DOCTYPE feed><feed xmlns="http://www.w3.org/2005/Atom"></feed>',
+        b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>not-a-commit</id></entry></feed>',
+    ],
+)
+def test_atom_revision_parser_rejects_invalid_feeds(update_service: SystemUpdateService, feed: bytes):
+    with pytest.raises(ValueError):
+        update_service._parse_atom_revision(feed)
+
+
+def test_api_revision_parser_accepts_raw_sha_and_json(update_service: SystemUpdateService):
+    assert update_service._parse_api_revision(LATEST_REVISION.encode()) == LATEST_REVISION
+    assert update_service._parse_api_revision(json.dumps({'sha': LATEST_REVISION}).encode()) == LATEST_REVISION
+
+
+@pytest.mark.asyncio
+async def test_revision_response_reader_enforces_decoded_size_limit(update_service: SystemUpdateService):
+    class Content:
+        async def iter_chunked(self, _chunk_size: int):
+            yield b'a' * MAX_REVISION_RESPONSE_BYTES
+            yield b'b'
+
+    class Response:
+        content_length = None
+        content = Content()
+
+    with pytest.raises(ValueError, match='too large'):
+        await update_service._read_limited_response(Response())
 
 
 def test_malformed_status_file_is_ignored(update_service: SystemUpdateService):

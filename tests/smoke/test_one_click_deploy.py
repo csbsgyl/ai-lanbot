@@ -238,6 +238,62 @@ repository_archive_url "https://github.com"
     ]
 
 
+def test_target_revision_parser_accepts_atom_and_api_json():
+    if BASH is None:
+        pytest.skip('bash is required to exercise the Linux deployment script')
+
+    revision = 'b' * 40
+    command = rf'''
+source "$1"
+revision_from_response '<feed><entry><id>tag:github.com,2008:Grit::Commit/{revision}</id></entry></feed>'
+printf '\n'
+revision_from_response '{{"sha":"{revision.upper()}"}}'
+printf '\n'
+'''
+    env = os.environ.copy()
+    env['PATH'] = os.pathsep.join((str(Path(BASH).parent), env.get('PATH', '')))
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT)],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [revision, revision]
+
+
+def test_target_revision_falls_back_to_api_when_atom_is_unavailable():
+    if BASH is None:
+        pytest.skip('bash is required to exercise the Linux deployment script')
+
+    revision = 'c' * 40
+    command = rf"""
+source "$1"
+curl() {{
+  local url="${{@: -1}}"
+  case "$url" in
+    *.atom) printf '%s' '<invalid-feed />' ;;
+    https://api.github.com/*) printf '%s' '{revision}' ;;
+    *) return 1 ;;
+  esac
+}}
+resolve_target_revision
+printf '%s\n' "$TARGET_REVISION"
+"""
+    env = os.environ.copy()
+    env['PATH'] = os.pathsep.join((str(Path(BASH).parent), env.get('PATH', '')))
+    result = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT)],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [revision]
+
+
 def test_compose_files_parameterize_environment_specific_resources():
     with (ROOT / 'docker' / 'docker-compose.yaml').open(encoding='utf-8') as file:
         compose = yaml.safe_load(file)
@@ -275,6 +331,9 @@ def test_host_updater_is_fixed_to_the_managed_deployment():
     assert '/var/run/docker.sock' not in host_script
     assert 'LANBOT_HTTP_PORT' in host_script
     assert 'LANBOT_COMPOSE_PROFILES' in host_script
+    assert 'commits/${REPO_BRANCH}.atom' in host_script
+    assert "'application/vnd.github.sha'" in host_script
+    assert '--max-filesize 524288' in host_script
 
 
 def test_runtime_image_is_preflighted_before_source_replacement():

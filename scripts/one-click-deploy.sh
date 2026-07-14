@@ -354,6 +354,48 @@ is_valid_revision() {
   [[ "$1" =~ ^[0-9a-fA-F]{40}$ ]]
 }
 
+revision_from_response() {
+  local response="$1"
+  local revision
+
+  revision="$(printf '%s' "$response" | tr -d '[:space:]')"
+  if is_valid_revision "$revision"; then
+    printf '%s' "$revision" | tr '[:upper:]' '[:lower:]'
+    return 0
+  fi
+
+  revision="$(
+    printf '%s\n' "$response" \
+      | sed -n 's#.*Grit::Commit/\([0-9a-fA-F]\{40\}\).*#\1#p' \
+      | head -n 1
+  )"
+  if ! is_valid_revision "$revision"; then
+    revision="$(
+      printf '%s\n' "$response" \
+        | sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([0-9a-fA-F]\{40\}\)".*/\1/p' \
+        | head -n 1
+    )"
+  fi
+  is_valid_revision "$revision" || return 1
+  printf '%s' "$revision" | tr '[:upper:]' '[:lower:]'
+}
+
+fetch_revision_url() {
+  local url="$1"
+  local accept="$2"
+  local response
+
+  response="$(
+    curl -fsSL \
+      -H "Accept: ${accept}" \
+      --connect-timeout 8 \
+      --max-time 20 \
+      --max-filesize 524288 \
+      "$url" 2>/dev/null || true
+  )"
+  revision_from_response "$response"
+}
+
 is_safe_systemd_install_dir() {
   [[ "$INSTALL_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] \
     && [[ "/${INSTALL_DIR#/}/" != *"/../"* ]]
@@ -370,7 +412,7 @@ repository_archive_url() {
 }
 
 resolve_target_revision() {
-  local api_url response
+  local api_url atom_url revision url
 
   if [ -n "$TARGET_REVISION" ]; then
     is_valid_revision "$TARGET_REVISION" || die "LANBOT_TARGET_REVISION must be a 40-character Git commit SHA."
@@ -378,18 +420,18 @@ resolve_target_revision() {
     return 0
   fi
 
+  atom_url="https://github.com/${REPO_SLUG}/commits/${REPO_BRANCH}.atom"
+  for url in "$atom_url" "${GITHUB_ACCELERATOR}/${atom_url}"; do
+    if revision="$(fetch_revision_url "$url" 'application/atom+xml')"; then
+      TARGET_REVISION="$revision"
+      return 0
+    fi
+  done
+
   api_url="https://api.github.com/repos/${REPO_SLUG}/commits/${REPO_BRANCH}"
   for url in "$api_url" "${GITHUB_ACCELERATOR}/${api_url}"; do
-    response="$(
-      curl -fsSL \
-        -H 'Accept: application/vnd.github.sha' \
-        --connect-timeout 8 \
-        --max-time 20 \
-        "$url" 2>/dev/null || true
-    )"
-    response="$(printf '%s' "$response" | tr -d '\r\n')"
-    if is_valid_revision "$response"; then
-      TARGET_REVISION="$(printf '%s' "$response" | tr '[:upper:]' '[:lower:]')"
+    if revision="$(fetch_revision_url "$url" 'application/vnd.github.sha')"; then
+      TARGET_REVISION="$revision"
       return 0
     fi
   done
