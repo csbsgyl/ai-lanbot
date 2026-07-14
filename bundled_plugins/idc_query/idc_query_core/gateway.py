@@ -19,7 +19,10 @@ MAX_TOKEN_LENGTH = 8192
 MAX_TIMEOUT_SECONDS = 120.0
 MAX_JSON_DEPTH = 16
 MAX_JSON_ITEMS = 4096
+DEFAULT_MAX_CONCURRENT_REQUESTS = 32
+MAX_CONCURRENT_REQUESTS = 256
 _READ_CHUNK_BYTES = 64 * 1024
+GATEWAY_BUSY_MESSAGE = '查询服务当前繁忙，请稍后重试。'
 
 _ERROR_CODE_MESSAGES = {
     'INVALID_VERIFICATION_CODE': '绑定验证未通过，请检查会员号和验证码后重试。',
@@ -64,6 +67,7 @@ class IDCQueryGateway:
         token: str,
         timeout_seconds: float,
         verify_tls: bool,
+        max_concurrent_requests: int = DEFAULT_MAX_CONCURRENT_REQUESTS,
     ):
         self.base_url = base_url.rstrip('/') if isinstance(base_url, str) else base_url
         self.token = token
@@ -75,6 +79,12 @@ class IDCQueryGateway:
             parsed_timeout = 8.0
         self.timeout_seconds = max(1.0, min(parsed_timeout, MAX_TIMEOUT_SECONDS))
         self.verify_tls = verify_tls
+        try:
+            parsed_concurrency = int(max_concurrent_requests)
+        except (TypeError, ValueError):
+            parsed_concurrency = DEFAULT_MAX_CONCURRENT_REQUESTS
+        self.max_concurrent_requests = max(1, min(parsed_concurrency, MAX_CONCURRENT_REQUESTS))
+        self._request_slots = asyncio.BoundedSemaphore(self.max_concurrent_requests)
 
     async def verify_binding(
         self,
@@ -203,27 +213,39 @@ class IDCQueryGateway:
         if safe_token:
             headers['Authorization'] = f'Bearer {safe_token}'
 
-        timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
+        request_deadline = asyncio.get_running_loop().time() + self.timeout_seconds
         try:
-            async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
-                async with session.request(
-                    method,
-                    request_url,
-                    headers=headers,
-                    json=json_body,
-                    ssl=self.verify_tls,
-                    allow_redirects=False,
-                ) as response:
-                    if response.status < 200 or 300 <= response.status < 400:
-                        raise GatewayError('查询网关返回了重定向或异常状态，请联系管理员检查网关地址。')
-                    if response.status >= 400:
-                        raise GatewayError(self._http_error_message(response.status, operation))
-                    response_bytes = await self._read_response(response)
-                    payload = self._parse_response(response_bytes)
+            await asyncio.wait_for(self._request_slots.acquire(), timeout=self.timeout_seconds)
         except asyncio.TimeoutError as exc:
-            raise GatewayError('查询超时，请稍后重试。') from exc
-        except aiohttp.ClientError as exc:
-            raise GatewayError('无法连接查询服务，请稍后重试。') from exc
+            raise GatewayError(GATEWAY_BUSY_MESSAGE) from exc
+
+        try:
+            remaining_seconds = request_deadline - asyncio.get_running_loop().time()
+            if remaining_seconds <= 0:
+                raise GatewayError(GATEWAY_BUSY_MESSAGE)
+            timeout = aiohttp.ClientTimeout(total=remaining_seconds)
+            try:
+                async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
+                    async with session.request(
+                        method,
+                        request_url,
+                        headers=headers,
+                        json=json_body,
+                        ssl=self.verify_tls,
+                        allow_redirects=False,
+                    ) as response:
+                        if response.status < 200 or 300 <= response.status < 400:
+                            raise GatewayError('查询网关返回了重定向或异常状态，请联系管理员检查网关地址。')
+                        if response.status >= 400:
+                            raise GatewayError(self._http_error_message(response.status, operation))
+                        response_bytes = await self._read_response(response)
+                        payload = self._parse_response(response_bytes)
+            except asyncio.TimeoutError as exc:
+                raise GatewayError('查询超时，请稍后重试。') from exc
+            except aiohttp.ClientError as exc:
+                raise GatewayError('无法连接查询服务，请稍后重试。') from exc
+        finally:
+            self._request_slots.release()
 
         if not payload and operation == 'unbind':
             return payload

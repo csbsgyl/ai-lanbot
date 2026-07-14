@@ -28,6 +28,8 @@ HELP_TEXT = """IDC 自助查询机器人
 未绑定的群只能查看帮助和执行绑定。"""
 
 _SENSITIVE_COMMANDS = {CommandType.BUSINESSES, CommandType.TICKETS, CommandType.BALANCE}
+DEFAULT_MAX_DEDUPE_MESSAGES = 4096
+DEFAULT_BINDING_LOCK_STRIPES = 64
 _QUERY_TITLES = {
     CommandType.IP: 'IP 查询结果',
     CommandType.PROTECTION: '防护查询结果',
@@ -65,16 +67,20 @@ class IDCQueryService:
         requests_per_minute: int = 20,
         bind_attempts_per_10_minutes: int = 5,
         dedupe_ttl_seconds: float = 300,
+        max_dedupe_messages: int = DEFAULT_MAX_DEDUPE_MESSAGES,
+        binding_lock_stripes: int = DEFAULT_BINDING_LOCK_STRIPES,
     ):
         self.store = store
         self.gateway = gateway
         self.exclusive_mode = exclusive_mode
         self.sensitive_binder_only = sensitive_binder_only
         self.audit_log = audit_log
-        self.dedupe_ttl_seconds = dedupe_ttl_seconds
+        self.dedupe_ttl_seconds = max(1.0, float(dedupe_ttl_seconds))
+        self.max_dedupe_messages = max(1, int(max_dedupe_messages))
         self._seen_messages: dict[str, float] = {}
         self._dedupe_lock = asyncio.Lock()
-        self._binding_locks: dict[str, asyncio.Lock] = {}
+        lock_count = max(1, int(binding_lock_stripes))
+        self._binding_locks = tuple(asyncio.Lock() for _ in range(lock_count))
         self.configure_rate_limits(
             requests_per_minute=requests_per_minute,
             bind_attempts_per_10_minutes=bind_attempts_per_10_minutes,
@@ -99,6 +105,9 @@ class IDCQueryService:
 
     async def initialize(self) -> None:
         await self.store.load()
+
+    def _binding_lock(self, group_id: str) -> asyncio.Lock:
+        return self._binding_locks[hash(group_id) % len(self._binding_locks)]
 
     async def handle(
         self,
@@ -153,11 +162,11 @@ class IDCQueryService:
 
         try:
             if command.kind == CommandType.BIND:
-                async with self._binding_locks.setdefault(group_id, asyncio.Lock()):
+                async with self._binding_lock(group_id):
                     current_binding = await self.store.get(group_id)
                     operation = await self._bind(command, current_binding, group_id, user_id, message_id)
             elif command.kind == CommandType.UNBIND:
-                async with self._binding_locks.setdefault(group_id, asyncio.Lock()):
+                async with self._binding_lock(group_id):
                     current_binding = await self.store.get(group_id)
                     operation = await self._unbind(current_binding, group_id, user_id, message_id)
             elif binding is None:
@@ -339,5 +348,7 @@ class IDCQueryService:
                 self._seen_messages.pop(key, None)
             if message_id in self._seen_messages:
                 return True
+            while len(self._seen_messages) >= self.max_dedupe_messages:
+                self._seen_messages.pop(next(iter(self._seen_messages)))
             self._seen_messages[message_id] = now + self.dedupe_ttl_seconds
             return False

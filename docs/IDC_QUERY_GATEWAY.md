@@ -148,6 +148,13 @@ credentials. The plugin also removes common secret fields from generic output.
   array items.
 - Responses must be UTF-8 JSON objects. Non-standard constants such as `NaN`
   and `Infinity` are rejected.
+- The bundled plugin permits at most 32 in-flight gateway requests. Additional
+  requests wait within the configured request-timeout budget and receive a
+  fixed busy response if no slot becomes available; they do not open another
+  upstream connection.
+- In-memory QQ message deduplication retains at most 4,096 recent message IDs,
+  and binding mutations use a fixed set of 64 lock stripes, so long-running
+  multi-group use cannot grow either structure without bound.
 - HTTP errors are classified before their response bodies are read. `401`
   means the gateway service token is invalid, while `403` means the bound
   member is not authorized.

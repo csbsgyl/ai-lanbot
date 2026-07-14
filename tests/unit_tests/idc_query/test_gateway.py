@@ -1,3 +1,4 @@
+import asyncio
 import gzip
 import json
 
@@ -5,7 +6,7 @@ from aiohttp import web
 import pytest
 
 from idc_query_core.commands import CommandType
-from idc_query_core.gateway import MAX_RESPONSE_BYTES, GatewayError, IDCQueryGateway
+from idc_query_core.gateway import GATEWAY_BUSY_MESSAGE, MAX_RESPONSE_BYTES, GatewayError, IDCQueryGateway
 
 
 async def _start_server(app: web.Application) -> tuple[web.AppRunner, int]:
@@ -60,6 +61,79 @@ async def test_gateway_sends_service_auth_and_tenant_headers():
     assert captured['headers']['X-QQ-User-ID'] == 'user-1'
     assert captured['headers']['X-IDC-Member-ID'] == 'member-1'
     assert captured['headers']['X-Request-ID'] == 'message-1'
+
+
+@pytest.mark.asyncio
+async def test_gateway_bounds_concurrent_outbound_requests():
+    active_requests = 0
+    max_active_requests = 0
+    saturated = asyncio.Event()
+    release_requests = asyncio.Event()
+
+    async def handle_summary(request):
+        nonlocal active_requests, max_active_requests
+        active_requests += 1
+        max_active_requests = max(max_active_requests, active_requests)
+        if active_requests == 2:
+            saturated.set()
+        try:
+            await release_requests.wait()
+            return web.json_response({'ok': True, 'data': {'ip': request.match_info['ip']}})
+        finally:
+            active_requests -= 1
+
+    app = web.Application()
+    app.router.add_get('/v1/ip/{ip}/summary', handle_summary)
+    runner, port = await _start_server(app)
+    gateway = IDCQueryGateway(
+        base_url=f'http://127.0.0.1:{port}',
+        token='',
+        timeout_seconds=2,
+        verify_tls=True,
+        max_concurrent_requests=2,
+    )
+    tasks = [asyncio.create_task(_query(gateway, request_id=f'message-{index}')) for index in range(6)]
+    payloads = []
+
+    try:
+        await asyncio.wait_for(saturated.wait(), timeout=1)
+        await asyncio.sleep(0.05)
+        assert active_requests == 2
+        release_requests.set()
+        payloads = await asyncio.gather(*tasks)
+    finally:
+        release_requests.set()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await runner.cleanup()
+
+    assert max_active_requests == 2
+    assert len(payloads) == 6
+    assert all(payload['ok'] is True for payload in payloads)
+
+
+@pytest.mark.asyncio
+async def test_gateway_does_not_start_network_when_request_slots_time_out(monkeypatch: pytest.MonkeyPatch):
+    class UnexpectedSession:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError('network access must not start')
+
+    monkeypatch.setattr('idc_query_core.gateway.aiohttp.ClientSession', UnexpectedSession)
+    gateway = IDCQueryGateway(
+        base_url='https://query.example.com',
+        token='',
+        timeout_seconds=1,
+        verify_tls=True,
+        max_concurrent_requests=1,
+    )
+    gateway.timeout_seconds = 0.01
+    await gateway._request_slots.acquire()
+    try:
+        with pytest.raises(GatewayError) as exc_info:
+            await _query(gateway)
+    finally:
+        gateway._request_slots.release()
+
+    assert exc_info.value.public_message == GATEWAY_BUSY_MESSAGE
 
 
 @pytest.mark.asyncio

@@ -45,6 +45,9 @@ async def _service(tmp_path, **overrides):
         audit_log=overrides.get('audit_log'),
         requests_per_minute=overrides.get('requests_per_minute', 20),
         bind_attempts_per_10_minutes=overrides.get('bind_attempts_per_10_minutes', 5),
+        dedupe_ttl_seconds=overrides.get('dedupe_ttl_seconds', 300),
+        max_dedupe_messages=overrides.get('max_dedupe_messages', 4096),
+        binding_lock_stripes=overrides.get('binding_lock_stripes', 64),
     )
     await service.initialize()
     return service, gateway
@@ -113,6 +116,58 @@ async def test_duplicate_unknown_message_does_not_reply_twice(tmp_path):
     assert first.reply
     assert duplicate.handled is True
     assert duplicate.reply is None
+
+
+@pytest.mark.asyncio
+async def test_message_dedupe_cache_has_a_hard_entry_limit(tmp_path):
+    service, _gateway = await _service(
+        tmp_path,
+        dedupe_ttl_seconds=3600,
+        max_dedupe_messages=3,
+    )
+
+    for index in range(10):
+        result = await service.handle(
+            text='帮助',
+            group_id='group-1',
+            user_id='user-1',
+            message_id=f'message-{index}',
+        )
+        assert result.reply
+
+    duplicate = await service.handle(
+        text='帮助',
+        group_id='group-1',
+        user_id='user-1',
+        message_id='message-9',
+    )
+    evicted = await service.handle(
+        text='帮助',
+        group_id='group-1',
+        user_id='user-1',
+        message_id='message-0',
+    )
+
+    assert duplicate.reply is None
+    assert evicted.reply
+    assert len(service._seen_messages) == 3
+
+
+@pytest.mark.asyncio
+async def test_binding_locks_use_a_fixed_number_of_stripes(tmp_path):
+    service, gateway = await _service(tmp_path, binding_lock_stripes=4)
+
+    for index in range(100):
+        result = await service.handle(
+            text='解绑',
+            group_id=f'group-{index}',
+            user_id='user-1',
+            message_id=f'message-{index}',
+        )
+        assert result.reply == '当前群尚未绑定会员。'
+
+    assert len(service._binding_locks) == 4
+    assert gateway.unbind_calls == []
 
 
 @pytest.mark.asyncio
