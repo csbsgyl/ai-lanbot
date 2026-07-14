@@ -20,6 +20,9 @@ The script also checks Docker image access automatically. By default it starts f
 - Installs Docker and Docker Compose when missing on common Linux distributions.
 - Downloads or updates `csbsgyl/ai-lanbot`.
 - Deploys the production instance without requiring a deployment mode argument.
+- Reuses the existing managed deployment's ports, container names, Compose
+  project, source mode, and Box setting unless the current command overrides
+  them with `LANBOT_*` variables.
 - Starts from an immutable commit-tagged image when available.
 - Confirms and pulls the target image before replacing managed source or
   bundled plugin files.

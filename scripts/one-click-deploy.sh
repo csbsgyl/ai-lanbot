@@ -232,6 +232,52 @@ set_env_key_if_missing() {
   fi
 }
 
+read_existing_deployment_setting() {
+  local key="$1"
+  local env_file="${INSTALL_DIR}/docker/.env"
+
+  [ -f "$env_file" ] || return 0
+  sed -n "s/^${key}=//p" "$env_file" | tail -n 1
+}
+
+reuse_existing_deployment_setting() {
+  local environment_name="$1"
+  local file_key="$2"
+  local target_name="$3"
+  local value
+
+  if declare -p "$environment_name" >/dev/null 2>&1; then
+    return 0
+  fi
+  value="$(read_existing_deployment_setting "$file_key")"
+  [ -n "$value" ] && printf -v "$target_name" '%s' "$value"
+}
+
+load_existing_deployment_settings() {
+  local box_enabled
+
+  is_managed_install_dir || return 0
+  reuse_existing_deployment_setting "LANBOT_COMPOSE_PROJECT_NAME" "COMPOSE_PROJECT_NAME" "COMPOSE_PROJECT"
+  reuse_existing_deployment_setting "LANBOT_HTTP_PORT" "LANGBOT_HTTP_PORT" "HTTP_PORT"
+  reuse_existing_deployment_setting "LANBOT_CONTAINER_NAME" "LANBOT_CONTAINER_NAME" "LANGBOT_CONTAINER_NAME"
+  reuse_existing_deployment_setting \
+    "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME" "PLUGIN_RUNTIME_CONTAINER_NAME"
+  reuse_existing_deployment_setting "LANBOT_BOX_CONTAINER_NAME" "LANBOT_BOX_CONTAINER_NAME" "BOX_CONTAINER_NAME"
+  reuse_existing_deployment_setting "LANBOT_PLUGIN_DEBUG_PORT" "LANBOT_PLUGIN_DEBUG_PORT" "PLUGIN_DEBUG_PORT"
+  reuse_existing_deployment_setting "LANBOT_REVERSE_PORT_MAPPING" "LANBOT_REVERSE_PORT_MAPPING" "REVERSE_PORT_MAPPING"
+  reuse_existing_deployment_setting "LANBOT_SOURCE_MODE" "LANBOT_SOURCE_MODE" "SOURCE_MODE"
+
+  if ! declare -p LANBOT_COMPOSE_PROFILES >/dev/null 2>&1; then
+    box_enabled="$(read_existing_deployment_setting "LANBOT_BOX_ENABLED")"
+    if [ "$box_enabled" = "true" ]; then
+      COMPOSE_PROFILES="all"
+    elif [ "$box_enabled" = "false" ]; then
+      COMPOSE_PROFILES=""
+    fi
+  fi
+  log "Reusing resource settings from the existing managed deployment."
+}
+
 install_bundled_plugins() {
   local source_dir="${INSTALL_DIR}/bundled_plugins/idc_query"
   local plugin_dir="${INSTALL_DIR}/docker/data/plugins/idc_query"
@@ -941,6 +987,7 @@ main() {
   local runtime_image=""
 
   parse_args "$@"
+  load_existing_deployment_settings
 
   [ "$(uname -s)" = "Linux" ] || die "This script supports Linux servers only."
   need_cmd curl
@@ -974,6 +1021,10 @@ main() {
   case "$COMPOSE_PROFILES" in
     ''|box|all) ;;
     *) die "Unsupported LANBOT_COMPOSE_PROFILES=${COMPOSE_PROFILES}. Use box, all, or leave it empty." ;;
+  esac
+  case "$SOURCE_MODE" in
+    archive|git) ;;
+    *) die "Unsupported LANBOT_SOURCE_MODE=${SOURCE_MODE}. Use archive or git." ;;
   esac
 
   acquire_deployment_lock

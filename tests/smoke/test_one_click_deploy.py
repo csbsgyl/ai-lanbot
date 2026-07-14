@@ -113,6 +113,88 @@ def test_production_alias_preserves_the_same_defaults():
     assert explicit_config == default_config
 
 
+@pytest.mark.skipif(BASH is None, reason='bash is required to exercise existing deployment settings')
+def test_repeat_deployment_reuses_resource_settings_and_respects_explicit_overrides(tmp_path):
+    install_dir = create_managed_install(tmp_path)
+    (install_dir / 'docker' / '.env').write_text(
+        '\n'.join(
+            (
+                'COMPOSE_PROJECT_NAME=existing-project',
+                'LANGBOT_HTTP_PORT=6300',
+                'LANBOT_CONTAINER_NAME=existing-langbot',
+                'LANBOT_PLUGIN_RUNTIME_CONTAINER_NAME=existing-plugin-runtime',
+                'LANBOT_BOX_CONTAINER_NAME=existing-box',
+                'LANBOT_PLUGIN_DEBUG_PORT=6401',
+                'LANBOT_REVERSE_PORT_MAPPING=7280-7285:2280-2285',
+                'LANBOT_BOX_ENABLED=true',
+                'LANBOT_SOURCE_MODE=git',
+                '',
+            )
+        ),
+        encoding='utf-8',
+    )
+    command = r"""
+source "$1"
+INSTALL_DIR="$2"
+load_existing_deployment_settings
+printf '%s\n' \
+  "$COMPOSE_PROJECT" \
+  "$HTTP_PORT" \
+  "$LANGBOT_CONTAINER_NAME" \
+  "$PLUGIN_RUNTIME_CONTAINER_NAME" \
+  "$BOX_CONTAINER_NAME" \
+  "$PLUGIN_DEBUG_PORT" \
+  "$REVERSE_PORT_MAPPING" \
+  "$COMPOSE_PROFILES" \
+  "$SOURCE_MODE"
+"""
+    env = {key: value for key, value in os.environ.items() if not key.startswith('LANBOT_')}
+    env['PATH'] = os.pathsep.join((str(Path(BASH).parent), env.get('PATH', '')))
+
+    reused = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT), str(install_dir)],
+        check=True,
+        capture_output=True,
+        env=env,
+        text=True,
+    ).stdout.splitlines()
+    overridden = subprocess.run(
+        [BASH, '-c', command, 'deployment-test', str(DEPLOY_SCRIPT), str(install_dir)],
+        check=True,
+        capture_output=True,
+        env={
+            **env,
+            'LANBOT_HTTP_PORT': '7300',
+            'LANBOT_CONTAINER_NAME': 'override-langbot',
+            'LANBOT_COMPOSE_PROFILES': '',
+        },
+        text=True,
+    ).stdout.splitlines()
+
+    assert reused[-9:] == [
+        'existing-project',
+        '6300',
+        'existing-langbot',
+        'existing-plugin-runtime',
+        'existing-box',
+        '6401',
+        '7280-7285:2280-2285',
+        'all',
+        'git',
+    ]
+    assert overridden[-9:] == [
+        'existing-project',
+        '7300',
+        'override-langbot',
+        'existing-plugin-runtime',
+        'existing-box',
+        '6401',
+        '7280-7285:2280-2285',
+        '',
+        'git',
+    ]
+
+
 def test_test_deployment_mode_is_rejected():
     if BASH is None:
         pytest.skip('bash is required to exercise the Linux deployment script')
