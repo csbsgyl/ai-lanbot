@@ -35,6 +35,8 @@ The script also checks Docker image access automatically. By default it starts f
 - Adds authenticated IDC gateway configuration under WebUI **Settings > IDC Query**.
 - Preserves IDC group bindings separately under `docker/data/idc-query` during source updates.
 - Keeps persistent data under `docker/data`.
+- Includes an owner-only, checksum-verified local backup/restore command that
+  stops running services while snapshotting `docker/data` for consistency.
 - Waits for the Plugin Runtime to become healthy before starting LangBot.
 - Waits for `/api/v1/system/info` to pass before reporting success.
 - Prints the local URL, remote URL, first-time setup URL, login URL, and maintenance commands.
@@ -214,3 +216,47 @@ docker compose ps
 docker compose logs -f langbot
 docker compose down
 ```
+
+### Local Data Backup
+
+Create a consistent local-data snapshot:
+
+```bash
+/opt/ai-lanbot/scripts/data-backup.sh create /opt/ai-lanbot
+```
+
+Backups are written to `/opt/ai-lanbot-backups` by default, outside the managed
+source and data trees. Each archive and SHA-256 sidecar is owner-only. The
+script records which services were running, stops only those services while
+archiving, then restarts them and waits for LangBot's HTTP health check. It
+keeps the newest five archives by default; set `LANBOT_BACKUP_KEEP` to a value
+from 1 to 100 or `LANBOT_BACKUP_DIR` to an absolute external backup directory.
+Symbolic links are preserved for Box/Skill virtual environments, while archive
+members nested through a link and device, FIFO, or socket entries are rejected.
+
+Restore a snapshot into the currently installed application version:
+
+```bash
+/opt/ai-lanbot/scripts/data-backup.sh restore \
+  /opt/ai-lanbot-backups/ai-lanbot-YYYYmmddTHHMMSSZ-000000-REVISION.tar.gz \
+  /opt/ai-lanbot
+```
+
+Restore verifies the sidecar and archive layout, creates a fresh pre-restore
+backup, stages the selected data, and starts the services. If startup or the
+health check fails, it puts the untouched pre-restore data back. The deployment
+`.env` is archived for disaster-recovery reference but is not applied during a
+normal restore, so current ports and container names remain stable.
+
+If both activation and automatic rollback fail at the filesystem level, the
+script leaves services stopped and preserves `.restore-current.*` and
+`.restore-failed.*` safeguard directories under `docker/` instead of deleting
+either data set. The error output prints those exact paths for manual recovery.
+
+This snapshot covers local `docker/data`, including the default SQLite
+database, local storage, IDC credentials/state, plugins, and local vector/Box
+data. PostgreSQL, S3, remote vector databases, and other external services must
+be backed up with their native tools; this script does not claim to snapshot
+them. Restore refuses a snapshot configured for an external database unless an
+operator explicitly sets `LANBOT_ALLOW_EXTERNAL_RESTORE=true` after completing
+the native database restore.

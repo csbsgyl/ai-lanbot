@@ -972,6 +972,8 @@ print_success_info() {
     log "Status: cd ${INSTALL_DIR}/docker && $(compose_cmd) ps"
   fi
   log "Logs: cd ${INSTALL_DIR}/docker && $(compose_cmd) logs -f langbot"
+  log "Backup: ${INSTALL_DIR}/scripts/data-backup.sh create ${INSTALL_DIR}"
+  log "Restore: ${INSTALL_DIR}/scripts/data-backup.sh restore <archive.tar.gz> ${INSTALL_DIR}"
 }
 
 verify_deployment() {

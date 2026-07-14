@@ -10,6 +10,16 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check deployment scripts
+        run: shellcheck scripts/data-backup.sh scripts/host-update.sh scripts/one-click-deploy.sh
+
   ruff:
     name: Ruff Lint & Format
     runs-on: ubuntu-latest
