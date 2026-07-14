@@ -12,7 +12,7 @@ import langbot_plugin.api.entities.builtin.platform.message as platform_message
 import langbot_plugin.api.entities.builtin.platform.events as platform_events
 import langbot_plugin.api.entities.builtin.platform.entities as platform_entities
 from langbot.libs.qq_official_api.api import QQOfficialClient
-from langbot.libs.qq_official_api.qqofficialevent import QQOfficialEvent
+from langbot.libs.qq_official_api.qqofficialevent import QQOfficialEvent, parse_qq_event_timestamp
 from ...utils import image
 
 if typing.TYPE_CHECKING:
@@ -136,17 +136,22 @@ class QQOfficialEventConverter(abstract_platform_adapter.AbstractEventConverter)
             return platform_events.FriendMessage(
                 sender=friend,
                 message_chain=yiri_chain,
-                time=int(datetime.datetime.strptime(event.timestamp, '%Y-%m-%dT%H:%M:%S%z').timestamp()),
+                time=parse_qq_event_timestamp(event.timestamp),
                 source_platform_object=event,
             )
 
         if event.t == 'DIRECT_MESSAGE_CREATE':
             friend = platform_entities.Friend(
-                id=event.guild_id,
-                nickname=event.t,
+                id=event.d_author_id,
+                nickname=event.username or event.t,
                 remark='',
             )
-            return platform_events.FriendMessage(sender=friend, message_chain=yiri_chain, source_platform_object=event)
+            return platform_events.FriendMessage(
+                sender=friend,
+                message_chain=yiri_chain,
+                time=parse_qq_event_timestamp(event.timestamp),
+                source_platform_object=event,
+            )
         if event.t == 'GROUP_AT_MESSAGE_CREATE':
             yiri_chain.insert(0, platform_message.At(target='justbot'))
 
@@ -161,7 +166,7 @@ class QQOfficialEventConverter(abstract_platform_adapter.AbstractEventConverter)
                 ),
                 special_title='',
             )
-            time = int(datetime.datetime.strptime(event.timestamp, '%Y-%m-%dT%H:%M:%S%z').timestamp())
+            time = parse_qq_event_timestamp(event.timestamp)
             return platform_events.GroupMessage(
                 sender=sender,
                 message_chain=yiri_chain,
@@ -181,7 +186,7 @@ class QQOfficialEventConverter(abstract_platform_adapter.AbstractEventConverter)
                 ),
                 special_title='',
             )
-            time = int(datetime.datetime.strptime(event.timestamp, '%Y-%m-%dT%H:%M:%S%z').timestamp())
+            time = parse_qq_event_timestamp(event.timestamp)
             return platform_events.GroupMessage(
                 sender=sender,
                 message_chain=yiri_chain,
@@ -384,13 +389,10 @@ class QQOfficialAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter
 
         async def on_event(event_type: str, event_data: dict):
             # 只处理消息事件，忽略 READY/RESUMED 等系统事件
-            message_event_types = {
-                'C2C_MESSAGE_CREATE',
-                'DIRECT_MESSAGE_CREATE',
-                'GROUP_AT_MESSAGE_CREATE',
-                'AT_MESSAGE_CREATE',
-            }
-            if event_type not in message_event_types:
+            if not isinstance(event_type, str):
+                await self.logger.warning('Ignoring QQ Official WebSocket event with an invalid event type')
+                return
+            if event_type not in self.bot.MESSAGE_EVENT_TYPES:
                 return
             if not isinstance(event_data, dict):
                 await self.logger.warning(f'Event data is not dict, skipping: {event_type} -> {type(event_data)}')
@@ -398,6 +400,10 @@ class QQOfficialAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter
             await self.logger.info(f'Processing message event: {event_type}')
             # 构造与 webhook 模式相同的 payload 结构
             payload = {'t': event_type, 'd': event_data}
+            validation_error = self.bot.validate_message_event(payload)
+            if validation_error:
+                await self.logger.warning(f'Ignoring invalid QQ Official WebSocket event: {validation_error}')
+                return
             message_data = await self.bot.get_message(payload)
             if message_data:
                 event = QQOfficialEvent.from_payload(message_data)

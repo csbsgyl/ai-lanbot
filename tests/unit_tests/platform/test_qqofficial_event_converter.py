@@ -55,6 +55,39 @@ def _group_event(**overrides) -> QQOfficialEvent:
     return QQOfficialEvent(payload)
 
 
+def _valid_message_payload(event_type: str) -> dict:
+    event_data = {
+        'id': f'message-{event_type.lower()}',
+        'content': '帮助',
+        'timestamp': '2026-07-11T04:00:00.123Z',
+        'author': {},
+    }
+    if event_type == 'C2C_MESSAGE_CREATE':
+        event_data['author'] = {'user_openid': 'user-openid'}
+    elif event_type == 'GROUP_AT_MESSAGE_CREATE':
+        event_data.update(
+            {
+                'group_openid': 'group-openid',
+                'author': {'member_openid': 'member-openid'},
+            }
+        )
+    elif event_type == 'DIRECT_MESSAGE_CREATE':
+        event_data.update(
+            {
+                'guild_id': 'guild-id',
+                'author': {'id': 'channel-user-id'},
+            }
+        )
+    elif event_type == 'AT_MESSAGE_CREATE':
+        event_data.update(
+            {
+                'channel_id': 'channel-id',
+                'author': {'id': 'channel-user-id'},
+            }
+        )
+    return {'op': 0, 't': event_type, 'd': event_data}
+
+
 @pytest.mark.asyncio
 async def test_group_message_preserves_member_and_group_openids():
     converted = await QQOfficialEventConverter.target2yiri(_group_event())
@@ -64,6 +97,28 @@ async def test_group_message_preserves_member_and_group_openids():
     assert converted.sender.group.id == 'group-openid'
     assert converted.sender.group.name == 'group-openid'
     assert isinstance(list(converted.message_chain)[0], platform_message.At)
+
+
+@pytest.mark.asyncio
+async def test_channel_direct_message_uses_author_identity_and_fractional_timestamp():
+    converted = await QQOfficialEventConverter.target2yiri(
+        QQOfficialEvent(
+            {
+                't': 'DIRECT_MESSAGE_CREATE',
+                'content': '帮助',
+                'd_id': 'message-direct',
+                'd_author_id': 'channel-user-id',
+                'username': 'Channel User',
+                'guild_id': 'direct-message-guild',
+                'timestamp': '2026-07-11T04:00:00.123Z',
+                'content_type': 'text/plain',
+            }
+        )
+    )
+
+    assert converted.sender.id == 'channel-user-id'
+    assert converted.sender.nickname == 'Channel User'
+    assert converted.time == 1783742400
 
 
 @pytest.mark.asyncio
@@ -172,6 +227,57 @@ def test_qqofficial_defaults_to_webhook_and_does_not_require_legacy_token():
     config_by_name = {item['name']: item for item in config_items}
     assert config_by_name['enable-webhook']['default'] is True
     assert config_by_name['token']['required'] is False
+
+
+@pytest.mark.parametrize('event_type', sorted(QQOfficialClient.MESSAGE_EVENT_TYPES))
+def test_qq_message_event_validator_accepts_documented_shapes(event_type):
+    assert QQOfficialClient.validate_message_event(_valid_message_payload(event_type)) is None
+
+
+@pytest.mark.parametrize(
+    ('event_type', 'invalid_fields', 'expected_error'),
+    [
+        ('C2C_MESSAGE_CREATE', {'author': {}}, 'invalid_user_openid'),
+        ('GROUP_AT_MESSAGE_CREATE', {'group_openid': ''}, 'invalid_group_openid'),
+        ('GROUP_AT_MESSAGE_CREATE', {'author': {}}, 'invalid_member_openid'),
+        ('DIRECT_MESSAGE_CREATE', {'author': {}}, 'invalid_author_id'),
+        ('DIRECT_MESSAGE_CREATE', {'guild_id': ''}, 'invalid_guild_id'),
+        ('AT_MESSAGE_CREATE', {'author': {}}, 'invalid_author_id'),
+        ('AT_MESSAGE_CREATE', {'channel_id': ''}, 'invalid_channel_id'),
+    ],
+)
+def test_qq_message_event_validator_reports_missing_routing_identifiers(
+    event_type,
+    invalid_fields,
+    expected_error,
+):
+    payload = _valid_message_payload(event_type)
+    payload['d'].update(invalid_fields)
+
+    assert QQOfficialClient.validate_message_event(payload) == expected_error
+
+
+@pytest.mark.parametrize('event_type', [[], {}])
+@pytest.mark.asyncio
+async def test_qq_webhook_rejects_non_string_event_type(event_type):
+    body = json.dumps({'id': 'invalid-type-event', 'op': 0, 't': event_type, 'd': {}}).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client._handle_message = AsyncMock()
+
+    response = await client.handle_unified_webhook(_signed_request(body, 'test-secret'))
+
+    assert response == ({'error': 'invalid callback event'}, 400)
+    assert QQOfficialClient.validate_message_event({'t': event_type}) == 'invalid_event_type'
+    client._handle_message.assert_not_awaited()
+    assert client.get_webhook_status()['rejected_total'] == 1
+    assert client.get_webhook_status()['events_total'] == 0
+    assert not client._seen_webhook_events
 
 
 @pytest.mark.asyncio
@@ -318,6 +424,7 @@ async def test_qq_webhook_acknowledges_signed_event_before_dispatch():
             'd': {
                 'id': 'message-1',
                 'content': '帮助',
+                'timestamp': '2026-07-11T12:00:00+08:00',
                 'group_openid': 'group-openid',
                 'author': {'member_openid': 'member-openid'},
             },
@@ -351,6 +458,7 @@ async def test_qq_webhook_acknowledges_duplicate_event_without_dispatching_twice
             'd': {
                 'id': 'message-duplicate',
                 'content': '查余额',
+                'timestamp': '2026-07-11T12:00:00+08:00',
                 'group_openid': 'group-openid',
                 'author': {'member_openid': 'member-openid'},
             },
@@ -391,6 +499,7 @@ async def test_qq_webhook_retries_an_event_after_pending_queue_recovers():
                 'd': {
                     'id': event_id,
                     'content': '查余额',
+                    'timestamp': '2026-07-11T12:00:00+08:00',
                     'group_openid': 'group-openid',
                     'author': {'member_openid': 'member-openid'},
                 },
@@ -440,6 +549,103 @@ async def test_qq_webhook_retries_an_event_after_pending_queue_recovers():
 
     assert retry_response == ({'op': 12}, 200)
     assert handled_message_ids == ['message-1', 'message-2']
+    assert client.get_webhook_status()['pending_events'] == 0
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_rejects_invalid_message_before_ack_and_allows_corrected_retry():
+    def event_body(author: object) -> bytes:
+        return json.dumps(
+            {
+                'id': 'event-structure',
+                'op': 0,
+                't': 'GROUP_AT_MESSAGE_CREATE',
+                'd': {
+                    'id': 'message-structure',
+                    'content': '帮助',
+                    'timestamp': '2026-07-11T12:00:00+08:00',
+                    'group_openid': 'group-openid',
+                    'author': author,
+                },
+            },
+            separators=(',', ':'),
+        ).encode()
+
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client._handle_message = AsyncMock()
+
+    rejected = await client.handle_unified_webhook(_signed_request(event_body([]), 'test-secret'))
+    accepted = await client.handle_unified_webhook(
+        _signed_request(event_body({'member_openid': 'member-openid'}), 'test-secret')
+    )
+    await asyncio.sleep(0)
+
+    assert rejected == ({'error': 'invalid callback event'}, 400)
+    assert accepted == ({'op': 12}, 200)
+    client._handle_message.assert_awaited_once()
+    metrics = client.get_webhook_status()
+    assert metrics['rejected_total'] == 1
+    assert metrics['events_total'] == 1
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_accepts_attachment_only_message_with_fractional_timestamp():
+    body = json.dumps(
+        {
+            'op': 0,
+            't': 'GROUP_AT_MESSAGE_CREATE',
+            'd': {
+                'id': 'message-image',
+                'content': '',
+                'timestamp': '2026-07-11T04:00:00.123Z',
+                'group_openid': 'group-openid',
+                'author': {'member_openid': 'member-openid'},
+                'attachments': [{'content_type': 'image/png', 'url': 'example.qq.com/image.png'}],
+            },
+        },
+        separators=(',', ':'),
+    ).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client._handle_message = AsyncMock()
+
+    response = await client.handle_unified_webhook(_signed_request(body, 'test-secret'))
+    await asyncio.sleep(0)
+
+    assert response == ({'op': 12}, 200)
+    event = client._handle_message.await_args.args[0]
+    assert event.attachments == 'https://example.qq.com/image.png'
+    assert event.content == ''
+
+
+@pytest.mark.asyncio
+async def test_qq_webhook_acknowledges_unknown_signed_event_without_dispatching():
+    body = json.dumps({'op': 0, 't': 'GUILD_CREATE', 'd': 'future-compatible-payload'}).encode()
+    client = QQOfficialClient(
+        app_id='test-app',
+        secret='test-secret',
+        token='',
+        logger=_logger(),
+        unified_mode=True,
+    )
+    client._handle_message = AsyncMock()
+
+    response = await client.handle_unified_webhook(_signed_request(body, 'test-secret'))
+
+    assert response == ({'op': 12}, 200)
+    client._handle_message.assert_not_awaited()
+    assert client.get_webhook_status()['events_total'] == 1
     assert client.get_webhook_status()['pending_events'] == 0
 
 
@@ -550,6 +756,7 @@ async def test_qq_webhook_is_reachable_through_per_bot_http_route():
             'd': {
                 'id': 'message-1',
                 'content': '帮助',
+                'timestamp': '2026-07-11T12:00:00+08:00',
                 'group_openid': 'group-openid',
                 'author': {'member_openid': 'member-openid'},
             },
@@ -604,6 +811,7 @@ async def test_qq_webhook_is_reachable_through_stable_callback_route():
             'd': {
                 'id': 'message-2',
                 'content': '查IP 1.1.1.1',
+                'timestamp': '2026-07-11T12:00:00+08:00',
                 'group_openid': 'group-openid',
                 'author': {'member_openid': 'member-openid'},
             },

@@ -98,6 +98,10 @@ returns `503` without marking the event as processed so QQ can retry it later.
 Configure the reverse proxy to pass through this status code instead of
 rewriting it to `200`; the callback diagnostics page reports current queue
 usage and overload count.
+Signed message events are checked against QQ's documented event shape before
+they are acknowledged. Invalid message events receive a fixed `400` response,
+while signed event types that the adapter does not consume are still
+acknowledged for forward compatibility.
 New QQ Official bots default to Webhook mode. WebSocket mode remains available
 as an explicit adapter setting.
 

@@ -8,7 +8,7 @@ import httpx
 from quart import Quart
 from typing import Callable, Dict, Any, Optional
 import langbot_plugin.api.entities.builtin.platform.events as platform_events
-from .qqofficialevent import QQOfficialEvent
+from .qqofficialevent import QQOfficialEvent, parse_qq_event_timestamp
 import json
 import traceback
 from cryptography.exceptions import InvalidSignature
@@ -16,6 +16,14 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 
 class QQOfficialClient:
+    MESSAGE_EVENT_TYPES = frozenset(
+        {
+            'C2C_MESSAGE_CREATE',
+            'DIRECT_MESSAGE_CREATE',
+            'GROUP_AT_MESSAGE_CREATE',
+            'AT_MESSAGE_CREATE',
+        }
+    )
     CALLBACK_MAX_BODY_BYTES = 1024 * 1024
     CALLBACK_SIGNATURE_MAX_AGE_SECONDS = 300
     CALLBACK_DEDUP_TTL_SECONDS = 600
@@ -176,6 +184,21 @@ class QQOfficialClient:
 
             self._webhook_metrics['last_valid_at'] = self._utc_now()
             if payload.get('op') == 0:
+                event_type = payload.get('t')
+                if not isinstance(event_type, str):
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                    await self.logger.warning('Rejected QQ Official event with an invalid event type')
+                    return {'error': 'invalid callback event'}, 400
+                if event_type not in self.MESSAGE_EVENT_TYPES:
+                    self._record_webhook_metric('events_total', 'last_event_at')
+                    return {'op': 12}, 200
+
+                validation_error = self.validate_message_event(payload)
+                if validation_error:
+                    self._record_webhook_metric('rejected_total', 'last_rejected_at')
+                    await self.logger.warning(f'Rejected invalid QQ Official message event: {validation_error}')
+                    return {'error': 'invalid callback event'}, 400
+
                 if self._is_duplicate_webhook_event(payload):
                     self._record_webhook_metric('duplicates_total')
                     await self.logger.info('Ignored duplicate QQ Official webhook event')
@@ -295,32 +318,97 @@ class QQOfficialClient:
         d = msg.get('d', {})
         if not isinstance(d, dict):
             return {}
+        author = d.get('author', {})
+        if not isinstance(author, dict):
+            return {}
+        content = d.get('content', '')
+        attachments = d.get('attachments') or []
+        if not isinstance(content, str) or not isinstance(attachments, list):
+            return {}
         message_data = {
-            't': msg.get('t', {}),
-            'user_openid': d.get('author', {}).get('user_openid', {}),
-            'timestamp': d.get('timestamp', {}),
-            'd_author_id': d.get('author', {}).get('id', {}),
-            'content': d.get('content', {}),
-            'd_id': d.get('id', {}),
-            'id': msg.get('id', {}),
-            'channel_id': d.get('channel_id', {}),
-            'username': d.get('author', {}).get('username', {}),
-            'guild_id': d.get('guild_id', {}),
-            'member_openid': d.get('author', {}).get('member_openid') or d.get('author', {}).get('openid', {}),
-            'group_openid': d.get('group_openid', {}),
+            't': msg.get('t', ''),
+            'user_openid': author.get('user_openid', ''),
+            'timestamp': d.get('timestamp', ''),
+            'd_author_id': author.get('id', ''),
+            'content': content,
+            'd_id': d.get('id', ''),
+            'id': msg.get('id', ''),
+            'channel_id': d.get('channel_id', ''),
+            'username': author.get('username', '') if isinstance(author.get('username', ''), str) else '',
+            'guild_id': d.get('guild_id', ''),
+            'member_openid': author.get('member_openid') or author.get('openid', ''),
+            'group_openid': d.get('group_openid', ''),
         }
-        attachments = d.get('attachments', [])
-        image_attachments = [attachment['url'] for attachment in attachments if await self.is_image(attachment)]
-        image_attachments_type = [
-            attachment['content_type'] for attachment in attachments if await self.is_image(attachment)
-        ]
-        if image_attachments:
-            message_data['image_attachments'] = image_attachments[0]
-            message_data['content_type'] = image_attachments_type[0]
-        else:
-            message_data['image_attachments'] = None
+        message_data['image_attachments'] = None
+        message_data['content_type'] = ''
+        for attachment in attachments:
+            if not isinstance(attachment, dict) or not await self.is_image(attachment):
+                continue
+            url = attachment.get('url')
+            content_type = attachment.get('content_type')
+            if isinstance(url, str) and url and isinstance(content_type, str):
+                message_data['image_attachments'] = url
+                message_data['content_type'] = content_type
+                break
 
         return message_data
+
+    @classmethod
+    def validate_message_event(cls, payload: dict[str, Any]) -> str | None:
+        """Return a stable error code when a supported QQ message event is malformed."""
+        event_type = payload.get('t')
+        if not isinstance(event_type, str):
+            return 'invalid_event_type'
+        if event_type not in cls.MESSAGE_EVENT_TYPES:
+            return 'unsupported_event_type'
+        event_data = payload.get('d')
+        if not isinstance(event_data, dict):
+            return 'invalid_event_data'
+        if not cls._valid_event_identifier(event_data.get('id')):
+            return 'invalid_message_id'
+        if not isinstance(event_data.get('content'), str):
+            return 'invalid_content'
+        try:
+            parse_qq_event_timestamp(event_data.get('timestamp'))
+        except (OverflowError, OSError, ValueError):
+            return 'invalid_timestamp'
+
+        author = event_data.get('author')
+        if not isinstance(author, dict):
+            return 'invalid_author'
+        if event_type == 'C2C_MESSAGE_CREATE':
+            if not cls._valid_event_identifier(author.get('user_openid')):
+                return 'invalid_user_openid'
+        elif event_type == 'GROUP_AT_MESSAGE_CREATE':
+            if not cls._valid_event_identifier(event_data.get('group_openid')):
+                return 'invalid_group_openid'
+            if not cls._valid_event_identifier(author.get('member_openid') or author.get('openid')):
+                return 'invalid_member_openid'
+        elif event_type == 'DIRECT_MESSAGE_CREATE':
+            if not cls._valid_event_identifier(author.get('id')):
+                return 'invalid_author_id'
+            if not cls._valid_event_identifier(event_data.get('guild_id')):
+                return 'invalid_guild_id'
+        elif event_type == 'AT_MESSAGE_CREATE':
+            if not cls._valid_event_identifier(author.get('id')):
+                return 'invalid_author_id'
+            if not cls._valid_event_identifier(event_data.get('channel_id')):
+                return 'invalid_channel_id'
+
+        attachments = event_data.get('attachments')
+        if attachments is not None:
+            if not isinstance(attachments, list) or any(not isinstance(item, dict) for item in attachments):
+                return 'invalid_attachments'
+            for attachment in attachments:
+                if 'content_type' in attachment and not isinstance(attachment['content_type'], str):
+                    return 'invalid_attachment_content_type'
+                if 'url' in attachment and not isinstance(attachment['url'], str):
+                    return 'invalid_attachment_url'
+        return None
+
+    @staticmethod
+    def _valid_event_identifier(value: Any) -> bool:
+        return isinstance(value, str) and 0 < len(value) <= 512
 
     async def is_image(self, attachment: dict) -> bool:
         """判断是否为图片附件"""
